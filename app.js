@@ -54,6 +54,14 @@
   let pid = ls.get("pm_pid");
   if (!pid || !/^p[a-z0-9]{8,}$/.test(pid)) { pid = "p" + Math.random().toString(36).slice(2, 12).padEnd(10, "0"); ls.set("pm_pid", pid); }
   $("name").value = ls.get("pm_name") || "";
+  // Playlist compartida desde Spotify (Temón instalado aparece en "Compartir"): se guarda hasta que haya sala y Spotify.
+  const sharedId = ["url", "text", "title"].map((k) => Spotify.parsePlaylist(params.get(k))).find(Boolean);
+  if (sharedId) { ls.set("pm_share", sharedId); }
+  if (["url", "text", "title"].some((k) => params.has(k))) {
+    for (const k of ["url", "text", "title"]) params.delete(k);
+    history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params : ""));
+  }
+  if (ls.get("pm_share")) $("shareNote").hidden = false;
   if (params.get("sala")) $("code").value = clean(params.get("sala"), 4).toUpperCase();
 
   let role = null;
@@ -284,7 +292,7 @@
     $("redirectUri").textContent = Spotify.redirectUri();
     openRoom();
     renderHost();
-    initSpotifyPanel(saved);
+    initSpotifyPanel(saved).then(applyShared);
   }
 
   function openRoom() {
@@ -744,6 +752,18 @@
     }
     if (saved && saved.music === "spotify" && saved.playlist) { $("spPlaylist").dataset.want = saved.playlist; }
     await refreshSpotify(saved && saved.music === "spotify");
+  }
+
+  async function applyShared() {
+    const id = ls.get("pm_share");
+    if (!id || role !== "host") return;
+    $("spPanel").open = true;
+    $("spLink").value = "https://open.spotify.com/playlist/" + id;
+    if (!Spotify.connected()) { show($("spErr"), "Conecta Spotify y la playlist que compartiste se usa sola."); return; }
+    try { localStorage.removeItem("pm_share"); } catch {}
+    $("shareNote").hidden = true;
+    await $("spLinkUse").onclick();
+    $("spPanel").scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function loadOwnPool() {

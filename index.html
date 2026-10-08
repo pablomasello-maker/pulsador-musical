@@ -37,6 +37,7 @@
     <button id="joinPlayer" class="primary">Entrar a jugar</button>
     <p id="startErr" class="err" hidden></p>
     <hr style="border:0;border-top:1px solid var(--line);width:100%;margin:4px 0">
+    <p id="shareNote" class="okmsg" hidden>🎶 Recibí una playlist de Spotify. Crea la sala y se usa sola.</p>
     <button id="joinHost">Crear sala (soy el anfitrión)</button>
     <p class="tip">El anfitrión es el móvil conectado al parlante. Crea la sala y los demás entran con el código o escaneando el QR.</p>
   </section>
@@ -199,6 +200,7 @@
               <input id="spLink" type="text" autocomplete="off" spellcheck="false" placeholder="https://open.spotify.com/playlist/…">
             </label>
             <p class="tip">En Spotify: ⋯ → Compartir → Copiar enlace. Funciona con cualquier playlist; Temón la pone en aleatorio y ve qué canción suena.</p>
+            <p class="tip">Más fácil en Android: instala Temón (menú ⋮ de Chrome → “Instalar app”) y en Spotify elige Compartir → Temón.</p>
             <button id="spLinkUse" class="primary">Usar este link</button>
           </div>
           <button id="spLogout" class="ghost" style="margin-top:10px">Desconectar Spotify</button>
