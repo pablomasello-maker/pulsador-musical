@@ -7,18 +7,18 @@
   const MAX_PLAYERS = 24;
   // Catálogo de desafíos. snippet: segundos que suena; limit: segundos para pulsar; mult: multiplica los puntos.
   const CH = {
-    clasico: { name: "Clásico", color: "#ffb627", rule: "Canción entera. El primero que pulsa contesta." },
-    flash: { name: "Intro relámpago", color: "#4fd1ff", rule: "Solo 3 segundos de canción y 15 para pulsar. Vale doble.", snippet: 3, limit: 15, mult: 2 },
-    reloj: { name: "Contrarreloj", color: "#ff8a5c", rule: "10 segundos para pulsar. Cuanto antes aciertes, más puntos extra.", limit: 10, speed: true },
-    doble: { name: "Doble o nada", color: "#b48cff", rule: "Acertar vale el doble. Fallar te resta lo mismo.", mult: 2, wrongMinus: true },
-    subita: { name: "Muerte súbita", color: "#ff5a4e", rule: "Un solo intento: si el primero falla, se acaba la ronda.", oneTry: true },
-    aguja: { name: "Aguja loca", color: "#3ddc97", rule: "Empieza en cualquier parte de la canción y suenan 8 segundos.", snippet: 8, randomStart: true, manual: "Ponla desde la mitad o donde quieras." },
-    anio: { name: "Año exacto", color: "#ff7ac6", rule: "Todos eligen el año de la canción. Exacto: 3 puntos. A 2 años o menos: 2. A 5 o menos: 1.", limit: 25, guess: true },
-    ruleta: { name: "Ruleta de desafíos", color: "#e9e6dc", rule: "Cada ronda gira la ruleta y toca un desafío al azar.", meta: true },
+    clasico: { ic: "🎵", tag: "La de siempre: suena y el más rápido gana.", badges: ["Sin límite"], name: "Clásico", color: "#ffb627", rule: "Canción entera. El primero que pulsa contesta." },
+    flash: { ic: "⚡", tag: "3 segundos de intro y a pulsar.", badges: ["3 s", "x2"], name: "Intro relámpago", color: "#4fd1ff", rule: "Solo 3 segundos de canción y 15 para pulsar. Vale doble.", snippet: 3, limit: 15, mult: 2 },
+    reloj: { ic: "⏱️", tag: "Corre el reloj: cuanto antes, más puntos.", badges: ["10 s", "Bonus"], name: "Contrarreloj", color: "#ff8a5c", rule: "10 segundos para pulsar. Cuanto antes aciertes, más puntos extra.", limit: 10, speed: true },
+    doble: { ic: "🎲", tag: "Acertar suma doble, fallar resta.", badges: ["x2", "Riesgo"], name: "Doble o nada", color: "#b48cff", rule: "Acertar vale el doble. Fallar te resta lo mismo.", mult: 2, wrongMinus: true },
+    subita: { ic: "💀", tag: "Un solo intento para todos.", badges: ["1 intento"], name: "Muerte súbita", color: "#ff5a4e", rule: "Un solo intento: si el primero falla, se acaba la ronda.", oneTry: true },
+    aguja: { ic: "🎯", tag: "Arranca en cualquier parte del tema.", badges: ["8 s", "Al azar"], name: "Aguja loca", color: "#3ddc97", rule: "Empieza en cualquier parte de la canción y suenan 8 segundos.", snippet: 8, randomStart: true, manual: "Ponla desde la mitad o donde quieras." },
+    anio: { ic: "📅", tag: "Todos eligen el año de la canción.", badges: ["25 s", "Hasta 3 pts"], name: "Año exacto", color: "#ff7ac6", rule: "Todos eligen el año de la canción. Exacto: 3 puntos. A 2 años o menos: 2. A 5 o menos: 1.", limit: 25, guess: true },
+    ruleta: { ic: "🎡", tag: "Gira la ruleta y que toque lo que toque.", badges: ["Sorpresa"], name: "Ruleta de desafíos", color: "#e9e6dc", rule: "Cada ronda gira la ruleta y toca un desafío al azar.", meta: true },
   };
   const MODES = {
-    normal: { name: "Normal", d: "Salen 4 opciones en cada móvil y se toca la correcta. Para que juegue cualquiera." },
-    pro: { name: "Profesional", d: "Sin opciones: pulsas y respondes en voz alta. Para expertos." },
+    normal: { ic: "🅰️", name: "Normal", d: "Salen 4 opciones en cada móvil y se toca la correcta. Para que juegue cualquiera." },
+    pro: { ic: "🎤", name: "Profesional", d: "Sin opciones: pulsas y respondes en voz alta. Para expertos." },
   };
   const FIELD = { cancion: "title", artista: "artist", disco: "album", anio: "year" };
   const mascotKind = (st) => ((CH[st.ch] || {}).guess ? "anio" : KINDS[st.kind] ? st.kind : "cancion");
@@ -385,11 +385,13 @@
     renderHost();
   }
 
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const kindsEl = $("kinds");
   for (const [k, [label, pts]] of Object.entries(KINDS)) {
-    const b = document.createElement("button");
-    b.className = "chip"; b.type = "button"; b.dataset.kind = k;
-    b.textContent = `${label} · ${pts} pt${pts > 1 ? "s" : ""}`;
+    const b = el("button", "kind");
+    b.type = "button"; b.dataset.kind = k; b.style.setProperty("--k", Fx.COLORS[k]);
+    const m = el("span", "km"); m.innerHTML = Fx.mascot(k, "happy");
+    b.append(m, el("span", "kn", label), el("span", "kp", `${pts} pt${pts > 1 ? "s" : ""}`));
     b.onclick = () => { H.kind = k; publish(); };
     kindsEl.appendChild(b);
   }
@@ -398,9 +400,7 @@
   for (const [id, m] of Object.entries(MODES)) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "mode m-" + id; b.dataset.mode = id;
-    const n = document.createElement("span"); n.className = "n"; n.textContent = m.name;
-    const d = document.createElement("span"); d.className = "d"; d.textContent = m.d;
-    b.append(n, d);
+    b.append(el("span", "mi", m.ic), el("span", "n", m.name), el("span", "d", m.d), el("span", "check", "✓"));
     b.onclick = () => { H.mode = id; saveHost(); renderHost(); };
     $("modes").appendChild(b);
   }
@@ -408,12 +408,12 @@
   // ---------- Desafíos ----------
   for (const [id, c] of Object.entries(CH)) {
     const b = document.createElement("button");
-    b.type = "button"; b.className = "chcard" + (c.meta ? " wide" : ""); b.dataset.ch = id;
+    b.type = "button"; b.className = "chcard" + (c.meta ? " wide rainbow" : c.guess ? " wide" : ""); b.dataset.ch = id;
     b.style.setProperty("--c", c.color);
-    const n = document.createElement("span"); n.className = "n"; n.textContent = c.name;
-    const d = document.createElement("span"); d.className = "d"; d.textContent = c.rule;
-    b.append(n, d);
-    b.onclick = () => { H.pick = id; saveHost(); renderHost(); };
+    const badges = el("span", "bdg");
+    for (const t of c.badges || []) badges.append(el("span", null, t));
+    b.append(el("span", "ic", c.ic), el("span", "n", c.name), el("span", "d", c.tag), badges, el("span", "check", "✓"));
+    b.onclick = () => { H.pick = id; saveHost(); renderHost(); b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); };
     $("chCards").appendChild(b);
   }
 
@@ -636,6 +636,9 @@
     const c = cfg();
     for (const b of kindsEl.children) b.setAttribute("aria-pressed", String(b.dataset.kind === H.kind));
     for (const b of $("chCards").children) b.setAttribute("aria-pressed", String(b.dataset.ch === H.pick));
+    const pk = CH[H.pick] || CH.clasico;
+    $("chDetail").style.setProperty("--c", pk.color);
+    $("chDetailIc").textContent = pk.ic; $("chDetailN").textContent = pk.name; $("chDetailD").textContent = pk.rule;
     for (const b of $("modes").children) b.setAttribute("aria-pressed", String(b.dataset.mode === H.mode));
     show($("modeTip"), H.mode === "normal" && music !== "spotify" ? "Las opciones se arman con tu playlist de Spotify. Sin Spotify, las rondas se juegan en modo Profesional." : H.mode === "normal" ? "En Año exacto se sigue eligiendo el año con el contador." : "");
     $("hJudge").hidden = H.phase !== "answering";

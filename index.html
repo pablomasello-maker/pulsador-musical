@@ -113,14 +113,15 @@
       <button id="revealBtn" class="ghost" hidden>Nadie acierta: mostrar la respuesta</button>
 
       <div class="panel" id="hRoundPanel">
-        <p class="eyebrow">Modo de juego</p>
+        <h3 class="step"><span>1</span>Modo de juego</h3>
         <div class="modes" id="modes"></div>
         <p id="modeTip" class="tip" hidden></p>
-        <p class="eyebrow">Desafío de la próxima ronda</p>
+        <h3 class="step"><span>2</span>Elige el desafío</h3>
         <div class="chcards" id="chCards"></div>
-        <p class="eyebrow">¿Qué hay que adivinar?</p>
-        <div class="chips" id="kinds"></div>
-        <button id="openRound" class="primary">Abrir ronda</button>
+        <div class="chdetail" id="chDetail"><span class="ic" id="chDetailIc"></span><div><p class="n" id="chDetailN"></p><p class="d" id="chDetailD"></p></div></div>
+        <h3 class="step"><span>3</span>¿Qué hay que adivinar?</h3>
+        <div class="kinds" id="kinds"></div>
+        <button id="openRound" class="primary go">Abrir ronda</button>
         <p id="manualTip" class="tip">Pon la canción en Spotify (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta. En modo manual los cortes los haces tú: un pitido doble te avisa cuándo parar. Para que la música se corte sola, conecta Spotify abajo.</p>
         <p id="spTip" class="tip" hidden>Al abrir la ronda suena una canción al azar de tu playlist. Se pausa sola cuando alguien pulsa.</p>
         <p id="roundErr" class="err" hidden></p>
