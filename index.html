@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#12142b">
+<meta name="description" content="Concurso de adivinar música: un móvil pone la música y los demás son pulsadores.">
+<title>Pulsador Musical</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { margin: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="brand">
+    <div class="disc" aria-hidden="true"></div>
+    <div>
+      <h1>Pulsador Musical</h1>
+      <p class="muted">Suena la canción, el primero que pulsa contesta.</p>
+    </div>
+  </header>
+
+  <!-- Inicio -->
+  <section id="start" class="panel">
+    <label for="name">Tu nombre
+      <input id="name" type="text" maxlength="16" autocomplete="nickname" placeholder="Ej. Lucía">
+    </label>
+    <label for="code">Código de la sala
+      <input id="code" class="codein" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="ABCD">
+    </label>
+    <button id="joinPlayer" class="primary">Entrar a jugar</button>
+    <p id="startErr" class="err" hidden></p>
+    <hr style="border:0;border-top:1px solid var(--line);width:100%;margin:4px 0">
+    <button id="joinHost">Crear sala (soy el anfitrión)</button>
+    <p class="tip">El anfitrión es el móvil conectado al parlante. Crea la sala y los demás entran con el código o escaneando el QR.</p>
+  </section>
+
+  <!-- Jugador -->
+  <section id="player" hidden>
+    <div class="wrap" style="padding:0">
+      <div class="stage">
+        <span id="pPill" class="pill">Conectando</span>
+        <p id="pBig" class="big">Conectando a la sala…</p>
+        <p id="pSmall" class="muted"></p>
+      </div>
+      <div id="pReveal" class="reveal" hidden></div>
+      <button id="buzz" class="buzzer" disabled>¡YA!</button>
+      <button id="retry" class="ghost" hidden>Volver a conectar</button>
+      <div class="panel">
+        <h2>Marcador</h2>
+        <ul id="pScores" class="scores"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Anfitrión -->
+  <section id="host" hidden>
+    <div class="wrap" style="padding:0">
+      <div class="panel">
+        <p class="eyebrow">Código de la sala</p>
+        <div class="share">
+          <div id="qr" class="qr" aria-label="Código QR para entrar a la sala"></div>
+          <div class="info">
+            <p id="roomCode" class="code">····</p>
+            <p id="joinLink" class="link"></p>
+            <button id="copyLink" class="ghost">Copiar enlace</button>
+          </div>
+        </div>
+        <p id="hostErr" class="err" hidden></p>
+      </div>
+
+      <div class="stage">
+        <span id="hPill" class="pill">Sala abierta</span>
+        <p id="hBig" class="big">Esperando jugadores</p>
+        <p id="hSmall" class="muted"></p>
+      </div>
+      <div id="hReveal" class="reveal" hidden></div>
+
+      <div class="panel" id="hRoundPanel">
+        <p class="eyebrow">Próxima ronda: ¿qué hay que adivinar?</p>
+        <div class="chips" id="kinds"></div>
+        <button id="openRound" class="primary">Abrir ronda</button>
+        <p id="manualTip" class="tip">Pon la canción en Spotify (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta.</p>
+        <p id="spTip" class="tip" hidden>Al abrir la ronda suena una canción al azar de tu playlist. Se pausa sola cuando alguien pulsa.</p>
+        <p id="roundErr" class="err" hidden></p>
+      </div>
+
+      <div class="panel" id="hJudge" hidden>
+        <p class="eyebrow">Turno de respuesta</p>
+        <ul id="hQueue" class="queue"></ul>
+        <div class="row">
+          <button id="right" class="ok">Correcto</button>
+          <button id="wrong" class="bad">Incorrecto</button>
+        </div>
+        <button id="skip" class="ghost">Nadie acierta, siguiente canción</button>
+      </div>
+
+      <div class="panel">
+        <h2>Marcador</h2>
+        <ul id="hScores" class="scores"></ul>
+        <label class="check" for="penalty"><input id="penalty" type="checkbox"> Restar 1 punto por fallo</label>
+        <button id="resetScores" class="ghost">Poner marcador a cero</button>
+        <div id="resetConfirm" class="row" hidden>
+          <button id="resetYes" class="bad">Sí, borrar puntos</button>
+          <button id="resetNo" class="ghost">Cancelar</button>
+        </div>
+      </div>
+
+      <details class="panel" id="spPanel">
+        <summary>Música automática con Spotify (opcional)</summary>
+        <div id="spOff">
+          <ol class="steps">
+            <li>Necesitas <strong>Spotify Premium</strong>.</li>
+            <li>Entra en <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> y crea una app (“Create app”).</li>
+            <li>En <strong>Redirect URI</strong> pega exactamente: <code id="redirectUri"></code></li>
+            <li>Marca <strong>Web API</strong>, guarda y copia el <strong>Client ID</strong> aquí abajo.</li>
+          </ol>
+          <label for="spClient" style="margin-top:12px">Client ID
+            <input id="spClient" type="text" autocomplete="off" spellcheck="false" placeholder="32 letras y números">
+          </label>
+          <button id="spConnect" class="primary" style="margin-top:10px">Conectar Spotify</button>
+        </div>
+        <div id="spOn" hidden>
+          <p class="okmsg" id="spWho">Spotify conectado</p>
+          <label for="spPlaylist" style="margin-top:10px">Playlist para el juego
+            <select id="spPlaylist"><option value="">Cargando playlists…</option></select>
+          </label>
+          <p id="spCount" class="tip" style="margin-top:6px"></p>
+          <p class="tip" style="margin-top:6px">Ten la app de Spotify abierta en este móvil (con el parlante). Solo salen las playlists que son tuyas o colaborativas.</p>
+          <div class="row" style="margin-top:10px">
+            <button id="spUse" class="primary">Usar esta playlist</button>
+            <button id="spManual" class="ghost">Volver a modo manual</button>
+          </div>
+          <button id="spLogout" class="ghost" style="margin-top:10px">Desconectar Spotify</button>
+        </div>
+        <p id="spErr" class="err" hidden></p>
+      </details>
+    </div>
+  </section>
+</div>
+
+<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="spotify.js"></script>
+<script src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
