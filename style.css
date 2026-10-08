@@ -306,3 +306,5 @@ a.btn.yt { background: #ff2a2a; color: #fff; }
 .pcol.p3 .bar { height: 60px; background: linear-gradient(#ffb27a, #d9773b); }
 .pcol.me .pn { color: var(--amber); }
 .final .rest { list-style: none; padding: 0; margin: 0; color: var(--muted); font-weight: 600; }
+.ytbox { width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 10px 24px rgba(0,0,0,.45); }
+.ytbox iframe { width: 100%; height: 100%; display: block; border: 0; }

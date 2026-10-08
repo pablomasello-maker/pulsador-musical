@@ -96,6 +96,7 @@
       </div>
 
       <div id="hDeck"></div>
+      <div id="ytBox" class="ytbox" hidden></div>
       <div class="stage">
         <div id="hMascot" class="mascot" aria-hidden="true"></div>
         <span id="hPill" class="pill">Sala abierta</span>
@@ -132,6 +133,10 @@
         <h3 class="step"><span>1</span>¿De dónde sale la música?</h3>
         <div class="sources" id="sources"></div>
         <p id="srcTip" class="tip"></p>
+        <div id="ytRow" hidden>
+          <label class="check" for="ytOn"><input id="ytOn" type="checkbox" checked> ▶️ Que suene dentro de Temón (YouTube)</label>
+          <p id="ytNote" class="tip"></p>
+        </div>
         <h3 class="step"><span>2</span>Modo de juego</h3>
         <div class="modes" id="modes"></div>
         <p id="modeTip" class="tip" hidden></p>
@@ -240,6 +245,8 @@
 <script src="spotify.js"></script>
 <script src="cassette.js"></script>
 <script src="decks.js"></script>
+<script src="videos.js"></script>
+<script src="yt.js"></script>
 <script src="fx.js"></script>
 <script src="app.js"></script>
 <script>

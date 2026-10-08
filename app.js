@@ -487,7 +487,10 @@
   const cfg = () => CH[H.ch] || CH.clasico;
 
   let snipEnd = 0; // cuándo hay que cortar el fragmento (para la cuenta en pantalla del anfitrión)
-  function stopMusic() { if (music === "spotify") Spotify.pause(); }
+  // Música que Temón controla solo: Spotify conectado o el video de YouTube dentro del juego.
+  const auto = () => music === "spotify" || !!(current && current.vid);
+  function stopMusic() { if (music === "spotify") Spotify.pause(); else if (current && current.vid) Ytp.pause(); }
+  function resumeMusic() { if (music === "spotify") return Spotify.resume(); if (current && current.vid) Ytp.resume(); }
   function stopSnippet() { clearTimeout(snippetTimer); snipEnd = 0; }
   function startSnippet() {
     stopSnippet();
@@ -496,7 +499,7 @@
     snipEnd = Date.now() + sn * 1000;
     snippetTimer = setTimeout(() => {
       snipEnd = 0; H.playing = false; stopMusic(); sfx.cut();
-      if (music !== "spotify") Fx.info("¡Pausa la música!", "Se acabó el fragmento", mascotKind(H));
+      if (!auto()) Fx.info("¡Pausa la música!", "Se acabó el fragmento", mascotKind(H));
       publish();
     }, sn * 1000);
   }
@@ -514,14 +517,15 @@
     }
     const left = H.running ? deadline - Date.now() : H.left;
     renderTimer($("hTimer"), left, H.phase);
-    const cut = snipEnd && music !== "spotify" ? Math.ceil((snipEnd - Date.now()) / 1000) : 0;
+    const cut = snipEnd && !auto() ? Math.ceil((snipEnd - Date.now()) / 1000) : 0;
     $("hCut").hidden = !(cut > 0);
     if (cut > 0) $("hCut").textContent = `Pausa la música en ${cut}…`;
     hDeck(H, left);
   }, 200);
 
   async function playCurrent() {
-    if (link) { await Spotify.seek(current.pos || 0); await Spotify.resume(); }
+    if (current.vid) await Ytp.play($("ytBox"), current.vid, (current.pos || 0) / 1000, ytFailed);
+    else if (link) { await Spotify.seek(current.pos || 0); await Spotify.resume(); }
     else await Spotify.play(current, current.pos);
     H.playing = true; stopped = false; startSnippet();
   }
@@ -534,11 +538,11 @@
   }
   $("tPlay").onclick = () => transport(async () => {
     if (!current) return;
-    if (H.playing) { stopSnippet(); H.playing = false; await Spotify.pause(); }
+    if (H.playing) { stopSnippet(); H.playing = false; await stopMusic(); }
     else if (stopped || cfg().snippet) await playCurrent();
-    else { await Spotify.resume(); H.playing = true; }
+    else { await resumeMusic(); H.playing = true; }
   });
-  $("tStop").onclick = () => transport(async () => { stopSnippet(); H.playing = false; stopped = true; await Spotify.pause(); });
+  $("tStop").onclick = () => transport(async () => { stopSnippet(); H.playing = false; stopped = true; await stopMusic(); });
   $("tReplay").onclick = () => transport(async () => { if (current) await playCurrent(); });
   $("tNext").onclick = () => $("openRound").click();
   $("revealBtn").onclick = () => $("skip").onclick();
@@ -586,7 +590,7 @@
     const e = H.evt; if (!e) return;
     const kind = mascotKind(H), who = e.pid ? nameOf(H, e.pid) : "";
     if (e.type === "win") Fx.win(`¡${who} acertó!`, `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind);
-    else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : music !== "spotify" && cfg().snippet ? "¡Rebote! Vuelve a poner el fragmento" : "¡Rebote! Los demás tienen otra chance", kind);
+    else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : !auto() && cfg().snippet ? "¡Rebote! Vuelve a poner el fragmento" : "¡Rebote! Los demás tienen otra chance", kind);
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "final") { const w = winnerOf(H); Fx.win("¡Fin de la partida!", w ? `Ganó ${nameOf(H, w)}` : "", "cancion"); setTimeout(() => Fx.confetti(), 900); }
@@ -636,9 +640,9 @@
     startClock();
     if (H.playing) return;
     if (cfg().snippet) {
-      if (music === "spotify" && current) playCurrent().then(publish).catch((e) => show($("roundErr"), e.message));
+      if (auto() && current) playCurrent().then(publish).catch((e) => show($("roundErr"), e.message));
       else { H.playing = true; startSnippet(); }
-    } else { H.playing = true; if (music === "spotify") Spotify.resume(); }
+    } else { H.playing = true; resumeMusic(); }
   }
 
   $("openRound").onclick = async () => {
@@ -677,8 +681,20 @@
       played.add(t.uri);
     } else if (music === "deck") {
       // Mazos: elijo la canción y se la muestro solo al anfitrión; la ronda arranca cuando toca "Ya suena".
+      Ytp.stop();
       current = pickDeckSong(); H.ch = ch; H.playing = false; stopSnippet();
       if (!current) { show($("roundErr"), "Elige al menos un mazo de canciones."); return; }
+      if (ytOn && Ytp.canSearch()) {
+        $("openRound").disabled = true;
+        const vid = await Ytp.find(current);
+        if (vid) {
+          current.vid = vid;
+          // Aguja loca: en cualquier parte del tema. Si no, a los 35 s para saltar la intro del video.
+          current.pos = (c.randomStart ? 20 + Math.random() * 120 : 35) * 1000;
+          try { await playCurrent(); } catch { current.vid = null; Ytp.stop(); }
+        }
+        $("openRound").disabled = false;
+      }
     } else { current = null; H.ch = ch; H.playing = true; startSnippet(); }
     const o = H.mode === "normal" && !c.guess && current ? buildOptions(current) : null;
     H.rmode = o ? "normal" : "pro"; H.opts = o ? o.opts : null; answerIdx = o ? o.idx : null;
@@ -690,11 +706,24 @@
     clearClock();
     H.lim = c.limit ? c.limit * 1000 : 0;
     if (c.limit) H.left = H.lim;
-    if (music === "deck") H.phase = "cue";
+    if (music === "deck" && !(current && current.vid)) { H.phase = "cue"; H.playing = false; stopSnippet(); }
     else if (c.limit) startClock();
     publish(); roundFx(H);
     if (H.phase === "cue") $("hCue").scrollIntoView({ behavior: "smooth", block: "center" });
   };
+  let ytOn = ls.get("pm_yt") !== "0";
+  $("ytOn").checked = ytOn;
+  $("ytOn").onchange = (e) => { ytOn = e.target.checked; ls.set("pm_yt", ytOn ? "1" : "0"); renderHost(); };
+  // El video no se puede ver dentro de Temón: la ronda vuelve a la tarjeta para que el anfitrión la ponga.
+  function ytFailed() {
+    if (!current || !current.vid) return;
+    current.vid = null; Ytp.stop();
+    if (H.phase === "open" && !H.queue.length && !Object.keys(H.picks).length) {
+      endRound(); H.playing = false; H.left = H.lim || null; H.phase = "cue";
+      Fx.info("Este video no se puede ver aquí", "Ponlo tú desde Spotify o YouTube", mascotKind(H));
+      publish();
+    }
+  }
   function pickDeckSong() {
     // Si hay que adivinar el disco, solo canciones que lo tengan.
     const all = deckPool().filter((t) => FIELD[H.kind] !== "album" || t.album);
@@ -734,7 +763,7 @@
   const revealNow = () => {
     H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img } : null;
     H.answer = H.opts ? answerIdx : null; stopped = false;
-    if (current && music === "spotify") { Spotify.resume(); H.playing = true; } else H.playing = music !== "manual" && !!current;
+    if (current && auto()) { resumeMusic(); H.playing = true; } else H.playing = music !== "manual" && !!current;
     checkEnd();
   };
   // ---------- Fin de la partida ----------
@@ -833,7 +862,11 @@
     $("openRound").textContent = H.round === 0 ? "Abrir primera ronda" : (H.phase === "open" || H.phase === "answering") ? "Otra canción" : "Abrir siguiente ronda";
     $("manualTip").hidden = music !== "manual"; $("spTip").hidden = music !== "spotify"; $("deckTip").hidden = music !== "deck";
     const live = H.phase === "open" || H.phase === "answering";
-    $("transport").hidden = !(music === "spotify" && current && H.phase !== "lobby");
+    $("transport").hidden = !(auto() && current && H.phase !== "lobby");
+    $("ytBox").hidden = !(current && current.vid && H.phase !== "lobby" && H.phase !== "final");
+    $("ytRow").hidden = music !== "deck";
+    $("ytOn").disabled = !Ytp.canSearch();
+    $("ytNote").textContent = Ytp.canSearch() ? "La música suena dentro de Temón y se pausa sola. Si un video no se puede ver, te muestro la canción para que la pongas tú." : "Falta la clave de YouTube: por ahora la canción la pones tú.";
     $("tPlay").firstChild.textContent = H.playing ? "❚❚" : "▶";
     $("tPlay").lastChild.textContent = H.playing ? "Pausa" : "Play";
     $("tPlay").classList.toggle("on", !!H.playing);
@@ -842,7 +875,7 @@
     renderOpts($("hOpts"), H, null, null);
     const mk = mascotKind(H);
     setMascot($("hMascot"), H.phase === "lobby" ? "cancion" : mk, H.phase === "answering" || H.phase === "yearjudge" ? "wow" : H.phase === "reveal" && !(H.last && H.last.ok) && !(H.results && H.results.some((r) => r.pts)) ? "sad" : "happy", live);
-    $("hRule").textContent = live ? (H.bomb ? "💣 Ronda bomba: acertar suma 10, fallar resta 5. " : "") + c.rule + (music !== "spotify" && c.manual ? " " + c.manual : "") : "";
+    $("hRule").textContent = live ? (H.bomb ? "💣 Ronda bomba: acertar suma 10, fallar resta 5. " : "") + c.rule + (!auto() && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn + ((GOALS[H.goal] || GOALS.free)[1] ? ` · Partida ${(GOALS[H.goal])[0].toLowerCase()}` : ""));
     else if (H.phase === "final") setStage("h", "rev", "Fin de la partida", winnerOf(H) ? `¡Ganó ${nameOf(H, winnerOf(H))}!` : "¡Empate!", "Toca «Revancha» para jugar otra.");
@@ -852,7 +885,7 @@
     else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, c.guess ? "¡Todos eligen año!" : H.rebound ? "¡Rebote!" : H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
       H.last && !H.last.ok ? `${nameOf(H, H.last.pid)} falló: los demás tienen otra chance. ${conn}` : `Adivina: ${kindLabel} · ${conn}`);
     else if (H.phase === "answering") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, `Contesta ${nameOf(H, H.queue[0])}`,
-      music === "spotify" ? "Música en pausa. Escucha la respuesta." : "Pausa la música y escucha la respuesta.");
+      auto() ? "Música en pausa. Escucha la respuesta." : "Pausa la música y escucha la respuesta.");
     else if (H.phase === "yearjudge") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, "¿De qué año es?", "Escribe el año correcto abajo.");
     else if (H.phase === "reveal") setStage("h", "rev", `Ronda ${H.round} · ${c.name}`, resultText(H, null), music === "manual" ? "Pon la siguiente canción y abre otra ronda." : "Abre la siguiente ronda cuando quieras.");
     // El anfitrión ve la canción mientras suena, por si tiene que juzgar.
@@ -1034,6 +1067,7 @@
     // Deja un aviso para que los jugadores sepan que la sala ya no existe.
     if (net) net.pub(code + "/down", { t: "closed" }, true);
     if (Spotify.connected()) Spotify.pause();
+    Ytp.stop();
     endRound();
     for (const k of Object.keys(H.scores)) delete H.scores[k];
     Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], names: {}, last: null, reveal: null, done: [], year: null, results: null, online: [] });
