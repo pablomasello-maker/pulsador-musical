@@ -359,3 +359,10 @@ a.btn.ytm { background: #fff; color: #ff0033; }
 .igo { font-size: 26px; text-transform: uppercase; }
 .intro, .intro * { box-sizing: border-box; }
 .isnd { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 2; width: 48px; height: 48px; min-height: 0; padding: 0; border-radius: 50%; font-size: 22px; background: #ffffff18; border: 1px solid #ffffff30; }
+/* Pantallas bajas (compu, celu acostado): se puede bajar y el botón queda siempre a la vista. */
+.intro { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; place-items: start center; }
+.intro .icenter { margin: auto 0; min-height: 100%; justify-content: center; padding-bottom: 8px; }
+.inotes { position: fixed; inset: 0; pointer-events: none; }
+.igo { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 8px 24px #000a; }
+@media (max-height: 760px) { .ivinyl { width: 110px; height: 110px; } .ilabel { width: 42px; height: 42px; font-size: 20px; } .ititle { font-size: clamp(48px, 14vw, 68px); } .icenter { gap: 10px; } .isteps li { padding: 7px 12px; } }
+@media (max-height: 560px) { .ieq, .ifact { display: none; } .ivinyl { width: 80px; height: 80px; } }

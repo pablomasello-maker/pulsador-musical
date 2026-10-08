@@ -158,6 +158,9 @@ window.IntroRiff = (() => {
     setTimeout(() => el.remove(), 550);
   }
   document.getElementById("introGo").addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  // En la compu también se cierra con Enter o Esc.
+  const onKey = (e) => { if (e.key === "Enter" || e.key === "Escape") { document.removeEventListener("keydown", onKey); close(); } };
+  document.addEventListener("keydown", onKey);
   // La primera vez espera al botón; las siguientes se va sola o con un toque.
   if (seen) {
     el.classList.add("quick");
