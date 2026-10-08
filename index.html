@@ -10,13 +10,35 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Lilita+One&family=Figtree:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 <style>
   body { margin: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 </style>
 </head>
 <body>
+<!-- Presentación al abrir la app -->
+<div id="intro" class="intro" role="dialog" aria-label="Bienvenida a Temón">
+  <div class="inotes" aria-hidden="true"></div>
+  <div class="icenter">
+    <div class="ivinyl" aria-hidden="true"><div class="ilabel">T</div></div>
+    <div class="ieq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <h1 class="ititle" aria-label="Temón"><span>T</span><span>e</span><span>m</span><span>ó</span><span>n</span></h1>
+    <p class="itag">Suena la canción. El más rápido gana.</p>
+    <ol class="isteps">
+      <li><b>🔊</b><span>Un celu pone la música en el parlante</span></li>
+      <li><b>📱</b><span>Los demás entran con el código y son pulsadores</span></li>
+      <li><b>⚡</b><span>¡El primero que toca contesta y suma!</span></li>
+    </ol>
+    <div class="ifact"><small>¿Sabías que…?</small><p id="introFact"></p></div>
+    <button id="introGo" class="primary igo">¡A jugar!</button>
+    <p id="introSkip" class="iskip" hidden>Tocá para saltar</p>
+  </div>
+</div>
+<script>
+  // Si entrás por el QR de una sala (o en pruebas) no se muestra.
+  (function () { var q = new URLSearchParams(location.search); if (q.get("sala") || q.has("broker")) document.getElementById("intro").remove(); })();
+</script>
 <div class="wrap">
   <header class="brand">
     <div class="disc" aria-hidden="true"></div>
@@ -249,6 +271,7 @@
 <script src="yt.js"></script>
 <script src="fx.js"></script>
 <script src="app.js"></script>
+<script src="intro.js"></script>
 <script>
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
