@@ -685,6 +685,15 @@
     sfx.open(); publish();
     $("hDeck").scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  // Si el anfitrión sale a Spotify/YouTube a darle play, la ronda arranca sola cuando vuelve a Temón.
+  let awayForSong = false;
+  for (const id of ["cueSp", "cueYt"]) $(id).addEventListener("click", () => { if (H.phase === "cue") awayForSong = true; });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !awayForSong) return;
+    awayForSong = false;
+    if (role !== "host" || H.phase !== "cue") return;
+    setTimeout(() => { if (H.phase === "cue") { Fx.info("¡Arranca!", "Pulsadores activos", mascotKind(H)); $("cueGo").onclick(); } }, 500);
+  });
   $("cueSwap").onclick = () => {
     if (H.phase !== "cue") return;
     const t = pickDeckSong(); if (!t) return;
@@ -755,7 +764,7 @@
       const q = encodeURIComponent(current.title + " " + current.artist);
       $("cueSp").href = "https://open.spotify.com/search/" + q;
       $("cueYt").href = "https://www.youtube.com/results?search_query=" + q;
-      $("cueTip").textContent = [c.manual || "", c.snippet ? `Suena ${c.snippet} segundos: te aviso cuándo pausar.` : "", c.guess ? "Todos van a elegir el año." : ""].filter(Boolean).join(" ") || "Cuando empiece a sonar, toca «Ya suena».";
+      $("cueTip").textContent = [c.manual || "", c.snippet ? `Suena ${c.snippet} segundos: te aviso cuándo pausar.` : "", c.guess ? "Todos van a elegir el año." : ""].filter(Boolean).join(" ");
     }
     $("hJudge").hidden = H.phase !== "answering";
     const guessing = !!c.guess && (H.phase === "open" || H.phase === "yearjudge");
@@ -780,7 +789,7 @@
     $("hRule").textContent = live ? c.rule + (music !== "spotify" && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn);
-    else if (H.phase === "cue") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Pon esta canción", "Búscala, dale play y toca «Ya suena».");
+    else if (H.phase === "cue") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Pon esta canción", "Búscala, dale play y vuelve: arranca sola.");
     else if (H.phase === "open" && H.opts) setStage("h", "open", `Ronda ${H.round} · ${c.name} · Normal`, H.rebound ? "¡Rebote!" : "¡Opciones en juego!",
       `${Object.keys(H.picks).length} de ${n} respondieron · Adivina: ${kindLabel}` + (H.last && !H.last.ok ? ` · ${nameOf(H, H.last.pid)} falló` : ""));
     else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, c.guess ? "¡Todos eligen año!" : H.rebound ? "¡Rebote!" : H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
