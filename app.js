@@ -63,7 +63,10 @@
     for (const k of ["url", "text", "title"]) params.delete(k);
     history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params : ""));
   }
-  if (ls.get("pm_share")) $("shareNote").hidden = false;
+  // Temón usa YouTube; Spotify queda escondido (se puede ver con ?spotify=1 para uso privado).
+  const SPOTIFY_UI = params.has("spotify");
+  $("spPanel").hidden = !SPOTIFY_UI;
+  if (SPOTIFY_UI && ls.get("pm_share")) $("shareNote").hidden = false;
   if (params.get("sala")) $("code").value = clean(params.get("sala"), 4).toUpperCase();
 
   let role = null;
@@ -315,7 +318,8 @@
     $("redirectUri").textContent = Spotify.redirectUri();
     openRoom();
     renderHost();
-    initSpotifyPanel(saved).then(applyShared);
+    if (SPOTIFY_UI) initSpotifyPanel(saved).then(applyShared);
+    else if (music === "spotify") music = "deck";
   }
 
   function openRoom() {
@@ -447,7 +451,7 @@
     b.dataset.deck = id; $("sources").appendChild(b);
   }
   $("sources").appendChild(sourceCard("free", "🎧", "Libre", "Pones lo que quieras", "#9ea3cf", () => { music = "manual"; current = null; saveHost(); renderHost(); }));
-  $("sources").appendChild(sourceCard("spot", "🟢", "Spotify", "Tu cuenta (uso privado)", "#1ed760", () => {
+  if (SPOTIFY_UI) $("sources").appendChild(sourceCard("spot", "🟢", "Spotify", "Tu cuenta (uso privado)", "#1ed760", () => {
     if (tracks.length || link) { music = "spotify"; saveHost(); renderHost(); return; }
     $("spPanel").open = true; $("spPanel").scrollIntoView({ behavior: "smooth", block: "center" });
   }));
@@ -457,7 +461,7 @@
       b.setAttribute("aria-pressed", String(on));
     }
     const n = deckPool().length;
-    $("srcTip").textContent = music === "deck" ? `${n} canciones en juego. En cada ronda te digo cuál poner (solo a ti) y la buscas en Spotify, YouTube o donde quieras.`
+    $("srcTip").textContent = music === "deck" ? `${n} canciones en juego. En cada ronda te digo cuál poner (solo a ti) y la buscas en YouTube Music o donde quieras.`
       : music === "manual" ? "Pones la música que quieras. Sin opciones automáticas: se juega en Profesional." : "La música sale de tu Spotify conectado.";
   }
 
@@ -715,10 +719,10 @@
   function ytFailed() {
     if (!current || !current.vid) return;
     current.vid = null; Ytp.stop();
-    if (H.phase === "cue") { Fx.info("Este video no se puede ver aquí", "Ponlo tú desde Spotify o YouTube", mascotKind(H)); publish(); return; }
+    if (H.phase === "cue") { Fx.info("Este video no se puede ver aquí", "Ponlo tú desde YouTube Music", mascotKind(H)); publish(); return; }
     if (H.phase === "open" && !H.queue.length && !Object.keys(H.picks).length) {
       endRound(); H.playing = false; H.left = H.lim || null; H.phase = "cue";
-      Fx.info("Este video no se puede ver aquí", "Ponlo tú desde Spotify o YouTube", mascotKind(H));
+      Fx.info("Este video no se puede ver aquí", "Ponlo tú desde YouTube Music", mascotKind(H));
       publish();
     }
   }
@@ -862,7 +866,7 @@
       $("cueLinks").hidden = !!current.vid; $("cueBack").hidden = !!current.vid;
       $("cueTitle").textContent = current.title; $("cueArtist").textContent = current.artist;
       const q = encodeURIComponent(current.title + " " + current.artist);
-      $("cueSp").href = "https://open.spotify.com/search/" + q;
+      $("cueSp").href = "https://music.youtube.com/search?q=" + q;
       $("cueYt").href = "https://www.youtube.com/results?search_query=" + q;
       $("cueTip").textContent = [c.manual || "", c.snippet ? `Suena ${c.snippet} segundos: te aviso cuándo pausar.` : "", c.guess ? "Todos van a elegir el año." : ""].filter(Boolean).join(" ");
     }

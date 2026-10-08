@@ -7,7 +7,7 @@ Concurso de adivinar música para jugar en grupo. El móvil anfitrión, conectad
 - Dos modos: Normal (4 opciones en cada móvil, armadas con la playlist de Spotify) y Profesional (pulsar y responder en voz alta).
 - Desafíos con ruleta, rebote cuando alguien falla, controles de música para el anfitrión y efectos de acierto y fallo.
 - 5 mazos con unas 1200 canciones (Rock nacional; Latino, cumbia y fiesta; Pop y rock en español; Clásicos en inglés; Hits 2000+): Temón le dice al anfitrión qué canción poner y la busca en Spotify o YouTube, así funciona para cualquiera sin conectar cuentas.
-- Spotify opcional para el anfitrión (uso privado): elige una playlist y la app pone canciones al azar, pausa al pulsar y muestra la respuesta.
+- Música por YouTube dentro de Temón (o YouTube Music afuera). Spotify queda escondido para uso privado (`?spotify=1`): elige una playlist y la app pone canciones al azar, pausa al pulsar y muestra la respuesta.
 - Se puede instalar en el móvil como app (PWA).
 
 Se publica con GitHub Pages desde la rama `main`.
