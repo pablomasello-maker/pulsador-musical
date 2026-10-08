@@ -161,7 +161,7 @@
       if (!st) return;
       const c = CH[st.ch] || CH.clasico;
       const kind = c.guess ? "el año" : (KINDS[st.kind] || KINDS.cancion)[0];
-      const live = st.phase === "open" || st.phase === "answering" || st.phase === "yearjudge";
+      const live = st.phase === "open" || st.phase === "answering" || st.phase === "yearjudge" || st.phase === "cue";
       if (st.round !== round) {
         const fresh = round !== -1;
         round = st.round; tape = 0;
@@ -258,7 +258,9 @@
   const conns = new Map(); // id de pestaña del jugador -> { pid, seen }
   let penalty = false;
   let code = null;
-  let music = "manual"; // "manual" | "spotify"
+  let music = "deck"; // "deck" (mazos de Temón) | "manual" (libre) | "spotify"
+  let deckSel = new Set(Object.keys(DECKS));
+  const deckPool = () => [...deckSel].flatMap((id) => (DECKS[id] ? DECKS[id].songs : []));
   let tracks = [];
   let link = null; // { id, name }: playlist ajena por link (se reproduce en aleatorio, sin leer sus canciones)
   let linkStarted = false;
@@ -270,7 +272,7 @@
 
   const randomCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 
-  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, answerIdx, penalty, music, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
+  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, answerIdx, penalty, music, deckSel: [...deckSel], cur: music === "deck" ? current : null, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
   function startHost(saved) {
     role = "host";
@@ -285,6 +287,10 @@
       penalty = !!saved.penalty; $("penalty").checked = penalty;
       played = new Set(saved.played || []);
       seen = Array.isArray(saved.seen) ? saved.seen : [];
+      music = saved.music === "manual" ? "manual" : "deck";
+      if (Array.isArray(saved.deckSel)) { const d = saved.deckSel.filter((id) => DECKS[id]); if (d.length) deckSel = new Set(d); }
+      if (music === "deck" && saved.cur) current = saved.cur;
+      if (H.phase === "cue" && !current) H.phase = "reveal";
       if (H.phase === "open" || H.phase === "answering") { H.phase = "reveal"; H.queue = []; H.reveal = null; H.answer = answerIdx; }
       H.left = null; H.running = false; H.playing = false;
     }
@@ -376,7 +382,7 @@
       H.bl[c.pid] = H.running ? Math.max(0, deadline - Date.now()) : (H.left || 0);
       if (H.queue.length === 1) {
         H.phase = "answering"; sfx.buzz(); vibrate(200);
-        freezeClock(); clearTimeout(snippetTimer);
+        freezeClock(); stopSnippet();
         if (H.playing) { H.playing = false; stopMusic(); }
       }
       publish();
@@ -408,6 +414,36 @@
     kindsEl.appendChild(b);
   }
 
+  // ---------- De dónde sale la música ----------
+  function sourceCard(cls, ic, name, sub, color, onclick) {
+    const b = el("button", "src " + cls); b.type = "button"; b.style.setProperty("--c", color);
+    b.append(el("span", "ic", ic), el("span", "n", name), el("span", "d", sub), el("span", "check", "✓"));
+    b.onclick = onclick; return b;
+  }
+  for (const [id, d] of Object.entries(DECKS)) {
+    const b = sourceCard("deck", d.ic, d.name, `${d.songs.length} canciones`, d.color, () => {
+      if (music !== "deck") { music = "deck"; deckSel = new Set([id]); }
+      else if (deckSel.has(id)) { if (deckSel.size > 1) deckSel.delete(id); }
+      else deckSel.add(id);
+      saveHost(); renderHost();
+    });
+    b.dataset.deck = id; $("sources").appendChild(b);
+  }
+  $("sources").appendChild(sourceCard("free", "🎧", "Libre", "Pones lo que quieras", "#9ea3cf", () => { music = "manual"; current = null; saveHost(); renderHost(); }));
+  $("sources").appendChild(sourceCard("spot", "🟢", "Spotify", "Tu cuenta (uso privado)", "#1ed760", () => {
+    if (tracks.length || link) { music = "spotify"; saveHost(); renderHost(); return; }
+    $("spPanel").open = true; $("spPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+  function renderSources() {
+    for (const b of $("sources").children) {
+      const on = b.dataset.deck ? music === "deck" && deckSel.has(b.dataset.deck) : b.classList.contains("free") ? music === "manual" : music === "spotify";
+      b.setAttribute("aria-pressed", String(on));
+    }
+    const n = deckPool().length;
+    $("srcTip").textContent = music === "deck" ? `${n} canciones en juego. En cada ronda te digo cuál poner (solo a ti) y la buscas en Spotify, YouTube o donde quieras.`
+      : music === "manual" ? "Pones la música que quieras. Sin opciones automáticas: se juega en Profesional." : "La música sale de tu Spotify conectado.";
+  }
+
   // ---------- Modo de juego ----------
   for (const [id, m] of Object.entries(MODES)) {
     const b = document.createElement("button");
@@ -433,17 +469,24 @@
   let deadline = null; // reloj del anfitrión mientras corre la cuenta atrás; a los jugadores se les manda lo que queda
   const cfg = () => CH[H.ch] || CH.clasico;
 
+  let snipEnd = 0; // cuándo hay que cortar el fragmento (para la cuenta en pantalla del anfitrión)
   function stopMusic() { if (music === "spotify") Spotify.pause(); }
+  function stopSnippet() { clearTimeout(snippetTimer); snipEnd = 0; }
   function startSnippet() {
-    clearTimeout(snippetTimer);
+    stopSnippet();
     const sn = cfg().snippet;
     if (!sn) return;
-    snippetTimer = setTimeout(() => { H.playing = false; stopMusic(); sfx.cut(); publish(); }, sn * 1000);
+    snipEnd = Date.now() + sn * 1000;
+    snippetTimer = setTimeout(() => {
+      snipEnd = 0; H.playing = false; stopMusic(); sfx.cut();
+      if (music !== "spotify") Fx.info("¡Pausa la música!", "Se acabó el fragmento", mascotKind(H));
+      publish();
+    }, sn * 1000);
   }
   function startClock() { if (H.left != null && !H.running) { deadline = Date.now() + H.left; H.running = true; } }
   function freezeClock() { if (H.running) { H.left = Math.max(0, deadline - Date.now()); H.running = false; deadline = null; } }
   function clearClock() { H.left = null; H.running = false; deadline = null; }
-  function endRound() { clearClock(); clearTimeout(snippetTimer); }
+  function endRound() { clearClock(); stopSnippet(); }
 
   setInterval(() => {
     if (role !== "host") return;
@@ -454,6 +497,9 @@
     }
     const left = H.running ? deadline - Date.now() : H.left;
     renderTimer($("hTimer"), left, H.phase);
+    const cut = snipEnd && music !== "spotify" ? Math.ceil((snipEnd - Date.now()) / 1000) : 0;
+    $("hCut").hidden = !(cut > 0);
+    if (cut > 0) $("hCut").textContent = `Pausa la música en ${cut}…`;
     hDeck(H, left);
   }, 200);
 
@@ -471,11 +517,11 @@
   }
   $("tPlay").onclick = () => transport(async () => {
     if (!current) return;
-    if (H.playing) { clearTimeout(snippetTimer); H.playing = false; await Spotify.pause(); }
+    if (H.playing) { stopSnippet(); H.playing = false; await Spotify.pause(); }
     else if (stopped || cfg().snippet) await playCurrent();
     else { await Spotify.resume(); H.playing = true; }
   });
-  $("tStop").onclick = () => transport(async () => { clearTimeout(snippetTimer); H.playing = false; stopped = true; await Spotify.pause(); });
+  $("tStop").onclick = () => transport(async () => { stopSnippet(); H.playing = false; stopped = true; await Spotify.pause(); });
   $("tReplay").onclick = () => transport(async () => { if (current) await playCurrent(); });
   $("tNext").onclick = () => $("openRound").click();
   $("revealBtn").onclick = () => $("skip").onclick();
@@ -502,7 +548,7 @@
       wrong = [...set].map(String);
     } else {
       const seen = new Set([norm(right)]);
-      for (const x of shuffle(link ? [...seen, ...tracks] : tracks.slice())) {
+      for (const x of shuffle(music === "deck" ? ((t.id && DECKS[t.id.split(":")[0]]) || { songs: deckPool() }).songs.slice() : link ? [...seen, ...tracks] : tracks.slice())) {
         const v = tidy(x[f]), k = norm(v);
         if (!k || seen.has(k)) continue;
         seen.add(k); wrong.push(v);
@@ -523,7 +569,7 @@
     const e = H.evt; if (!e) return;
     const kind = mascotKind(H), who = e.pid ? nameOf(H, e.pid) : "";
     if (e.type === "win") Fx.win(`¡${who} acertó!`, `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind);
-    else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : "¡Rebote! Los demás tienen otra chance", kind);
+    else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : music !== "spotify" && cfg().snippet ? "¡Rebote! Vuelve a poner el fragmento" : "¡Rebote! Los demás tienen otra chance", kind);
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "year") {
@@ -603,6 +649,10 @@
       catch (e) { show($("roundErr"), e.message); $("openRound").disabled = false; return; }
       $("openRound").disabled = false;
       played.add(t.uri);
+    } else if (music === "deck") {
+      // Mazos: elijo la canción y se la muestro solo al anfitrión; la ronda arranca cuando toca "Ya suena".
+      current = pickDeckSong(); H.ch = ch; H.playing = false; stopSnippet();
+      if (!current) { show($("roundErr"), "Elige al menos un mazo de canciones."); return; }
     } else { current = null; H.ch = ch; H.playing = true; startSnippet(); }
     const o = H.mode === "normal" && !c.guess && current ? buildOptions(current) : null;
     H.rmode = o ? "normal" : "pro"; H.opts = o ? o.opts : null; answerIdx = o ? o.idx : null;
@@ -612,13 +662,42 @@
     H.done = []; H.year = null; H.results = null; for (const k of Object.keys(guesses)) delete guesses[k];
     clearClock();
     H.lim = c.limit ? c.limit * 1000 : 0;
-    if (c.limit) { H.left = H.lim; startClock(); }
+    if (c.limit) H.left = H.lim;
+    if (music === "deck") H.phase = "cue";
+    else if (c.limit) startClock();
     publish(); roundFx(H);
+    if (H.phase === "cue") $("hCue").scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+  function pickDeckSong() {
+    const all = deckPool();
+    let pool = all.filter((t) => !played.has(t.id) && (!current || t.id !== current.id));
+    if (!pool.length) { played.clear(); pool = all.filter((t) => !current || t.id !== current.id); }
+    if (!pool.length) pool = all;
+    const t = pool[Math.floor(Math.random() * pool.length)];
+    if (t) played.add(t.id);
+    return t ? { ...t } : null;
+  }
+  // El anfitrión ya puso la canción: arrancan los pulsadores, el reloj y el fragmento.
+  $("cueGo").onclick = () => {
+    if (H.phase !== "cue") return;
+    H.phase = "open"; H.playing = true; startSnippet();
+    if (H.lim) { H.left = H.lim; startClock(); }
+    sfx.open(); publish();
+    $("hDeck").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  $("cueSwap").onclick = () => {
+    if (H.phase !== "cue") return;
+    const t = pickDeckSong(); if (!t) return;
+    current = t;
+    const c = cfg();
+    const o = H.mode === "normal" && !c.guess ? buildOptions(current) : null;
+    H.rmode = o ? "normal" : "pro"; H.opts = o ? o.opts : null; answerIdx = o ? o.idx : null;
+    publish();
   };
   const revealNow = () => {
     H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img } : null;
     H.answer = H.opts ? answerIdx : null; stopped = false;
-    if (current) { Spotify.resume(); H.playing = true; } else H.playing = false;
+    if (current && music === "spotify") { Spotify.resume(); H.playing = true; } else H.playing = music !== "manual" && !!current;
   };
   // Año exacto: al acabar el tiempo (o votar todos) se puntúa con el año de Spotify, o lo escribe el anfitrión.
   function finishGuess() {
@@ -667,7 +746,17 @@
     $("chDetail").style.setProperty("--c", pk.color);
     $("chDetailIc").textContent = pk.ic; $("chDetailN").textContent = pk.name; $("chDetailD").textContent = pk.rule;
     for (const b of $("modes").children) b.setAttribute("aria-pressed", String(b.dataset.mode === H.mode));
-    show($("modeTip"), H.mode === "normal" && music !== "spotify" ? "Las opciones se arman con tu playlist de Spotify. Sin Spotify, las rondas se juegan en modo Profesional." : H.mode === "normal" ? "En Año exacto se sigue eligiendo el año con el contador." : "");
+    show($("modeTip"), H.mode === "normal" && music === "manual" ? "En modo libre Temón no sabe qué canción suena, así que las rondas van en Profesional. Elige un mazo para tener opciones." : H.mode === "normal" ? "En Año exacto se sigue eligiendo el año con el contador." : "");
+    renderSources();
+    const cue = H.phase === "cue" && current;
+    $("hCue").hidden = !cue;
+    if (cue) {
+      $("cueTitle").textContent = current.title; $("cueArtist").textContent = current.artist;
+      const q = encodeURIComponent(current.title + " " + current.artist);
+      $("cueSp").href = "https://open.spotify.com/search/" + q;
+      $("cueYt").href = "https://www.youtube.com/results?search_query=" + q;
+      $("cueTip").textContent = [c.manual || "", c.snippet ? `Suena ${c.snippet} segundos: te aviso cuándo pausar.` : "", c.guess ? "Todos van a elegir el año." : ""].filter(Boolean).join(" ") || "Cuando empiece a sonar, toca «Ya suena».";
+    }
     $("hJudge").hidden = H.phase !== "answering";
     const guessing = !!c.guess && (H.phase === "open" || H.phase === "yearjudge");
     $("hYear").hidden = !guessing;
@@ -677,7 +766,7 @@
       : `${H.done.length} de ${n} ya eligieron año.` + (music === "manual" ? " Al cerrar, te pediré el año correcto." : "");
     renderResults($("hResults"), $("hResList"), $("hResTitle"), H, null);
     $("openRound").textContent = H.round === 0 ? "Abrir primera ronda" : (H.phase === "open" || H.phase === "answering") ? "Otra canción" : "Abrir siguiente ronda";
-    $("manualTip").hidden = music === "spotify"; $("spTip").hidden = music !== "spotify";
+    $("manualTip").hidden = music !== "manual"; $("spTip").hidden = music !== "spotify"; $("deckTip").hidden = music !== "deck";
     const live = H.phase === "open" || H.phase === "answering";
     $("transport").hidden = !(music === "spotify" && current && H.phase !== "lobby");
     $("tPlay").firstChild.textContent = H.playing ? "❚❚" : "▶";
@@ -688,9 +777,10 @@
     renderOpts($("hOpts"), H, null, null);
     const mk = mascotKind(H);
     setMascot($("hMascot"), H.phase === "lobby" ? "cancion" : mk, H.phase === "answering" || H.phase === "yearjudge" ? "wow" : H.phase === "reveal" && !(H.last && H.last.ok) && !(H.results && H.results.some((r) => r.pts)) ? "sad" : "happy", live);
-    $("hRule").textContent = live ? c.rule + (music === "manual" && c.manual ? " " + c.manual : "") : "";
+    $("hRule").textContent = live ? c.rule + (music !== "spotify" && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn);
+    else if (H.phase === "cue") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Pon esta canción", "Búscala, dale play y toca «Ya suena».");
     else if (H.phase === "open" && H.opts) setStage("h", "open", `Ronda ${H.round} · ${c.name} · Normal`, H.rebound ? "¡Rebote!" : "¡Opciones en juego!",
       `${Object.keys(H.picks).length} de ${n} respondieron · Adivina: ${kindLabel}` + (H.last && !H.last.ok ? ` · ${nameOf(H, H.last.pid)} falló` : ""));
     else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, c.guess ? "¡Todos eligen año!" : H.rebound ? "¡Rebote!" : H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
@@ -698,7 +788,7 @@
     else if (H.phase === "answering") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, `Contesta ${nameOf(H, H.queue[0])}`,
       music === "spotify" ? "Música en pausa. Escucha la respuesta." : "Pausa la música y escucha la respuesta.");
     else if (H.phase === "yearjudge") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, "¿De qué año es?", "Escribe el año correcto abajo.");
-    else if (H.phase === "reveal") setStage("h", "rev", `Ronda ${H.round} · ${c.name}`, resultText(H, null), music === "spotify" ? "Abre la siguiente ronda cuando quieras." : "Pon la siguiente canción y abre otra ronda.");
+    else if (H.phase === "reveal") setStage("h", "rev", `Ronda ${H.round} · ${c.name}`, resultText(H, null), music === "manual" ? "Pon la siguiente canción y abre otra ronda." : "Abre la siguiente ronda cuando quieras.");
     // El anfitrión ve la canción mientras suena, por si tiene que juzgar.
     renderReveal($("hReveal"), H.reveal || (current && (H.phase === "open" || H.phase === "answering") ? { title: current.title, artist: current.artist, album: current.album, year: current.year } : null));
     $("hQueue").replaceChildren(...H.queue.map((id, i) => {
@@ -720,7 +810,7 @@
       try { await Spotify.login($("spClient").value); } catch (e) { show($("spErr"), e.message); }
     };
     $("spLogout").onclick = () => { Spotify.logout(); music = "manual"; tracks = []; link = null; refreshSpotify(); publish(); };
-    $("spManual").onclick = () => { music = "manual"; current = null; link = null; publish(); refreshSpotify(); };
+    $("spManual").onclick = () => { music = "deck"; current = null; link = null; publish(); refreshSpotify(); };
     $("spLinkUse").onclick = async () => {
       const id = Spotify.parsePlaylist($("spLink").value);
       show($("spErr"), "");
@@ -837,7 +927,7 @@
         if (fresh(d, retained) && typeof d.st === "object") {
           st = d.st; lastStateAt = Date.now();
           pDeadline = st.running && typeof st.left === "number" ? Date.now() + st.left : null;
-          const live = st.phase === "open" || st.phase === "answering";
+          const live = st.phase === "open" || st.phase === "answering" || st.phase === "cue";
           if (seenRound !== null && st.round !== seenRound && live) roundFx(st);
           if (seenEv !== null && st.ev !== seenEv) playerFx(st);
           seenRound = st.round; seenEv = st.ev;
@@ -983,6 +1073,10 @@
     if (canBuzz && !guessing) btn.classList.add("live");
 
     if (st.phase === "lobby") setStage("p", "", `Sala ${joinCode}`, `Hola, ${myName}`, "El anfitrión abrirá la primera ronda enseguida.");
+    else if (st.phase === "cue") {
+      const c = CH[st.ch] || CH.clasico;
+      setStage("p", "", `Ronda ${st.round} · ${c.name}${c.guess ? "" : " · " + kindLabel}`, "¡Preparados!", "El anfitrión está poniendo la canción…");
+    }
     else if (st.phase === "open" || st.phase === "answering") {
       const c = CH[st.ch] || CH.clasico;
       const tag = c.guess ? `Ronda ${st.round} · ${c.name}` : `Ronda ${st.round} · ${c.name} · ${kindLabel}`;
@@ -1003,7 +1097,7 @@
     } else if (st.phase === "reveal") {
       setStage("p", "rev", `Ronda ${st.round} · ${(CH[st.ch] || CH.clasico).name}`, resultText(st, pid), "Atento a la siguiente canción.");
     }
-    $("pRule").textContent = (st.phase === "open" || st.phase === "answering") ? (CH[st.ch] || CH.clasico).rule : "";
+    $("pRule").textContent = (st.phase === "open" || st.phase === "answering" || st.phase === "cue") ? (CH[st.ch] || CH.clasico).rule : "";
     renderReveal($("pReveal"), st.phase === "reveal" ? st.reveal : null);
     lastFirst = queue[0] || null;
     renderScores($("pScores"), st, pid, Array.isArray(st.online) ? st.online : []);

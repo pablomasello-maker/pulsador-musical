@@ -274,3 +274,21 @@ button.go:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 
 @media (prefers-reduced-motion: reduce) { .stage::before, .mascot.bounce svg, .opt.wrong, .opt.right, .fx.banner .bcard { animation: none !important; } }
 .opt:has(.ow:empty) .ot { grid-row: 1 / 3; }
 .linkbox { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- Fuente de música y canción secreta ---- */
+.sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.src { --c: var(--amber); position: relative; text-align: left; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 12px; min-height: 0; border-radius: 16px; background: #15183a; border: 2px solid var(--line); transition: transform .15s; }
+.src .ic { grid-row: 1 / 3; font-size: 26px; }
+.src .n { font: 800 15px/1.15 var(--display); color: var(--fg); }
+.src .d { font: 600 12px var(--body); color: var(--muted); }
+.src .check { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #14102a; font: 900 13px var(--body); transform: scale(0); transition: transform .2s cubic-bezier(.3,1.8,.5,1); }
+.src[aria-pressed="true"] { background: linear-gradient(150deg, var(--c), color-mix(in srgb, var(--c) 60%, #2a1060)); border-color: #fff; transform: translateY(-2px); box-shadow: 0 5px 0 color-mix(in srgb, var(--c) 45%, #000); }
+.src[aria-pressed="true"] .n, .src[aria-pressed="true"] .d { color: #14102a; }
+.src[aria-pressed="true"] .check { transform: scale(1); }
+.cuecard { border: 3px dashed var(--amber); background: radial-gradient(120% 80% at 0% 0%, rgba(255,182,39,.18), transparent 60%), var(--panel); text-align: center; }
+.cuecard .cueT { font: 800 clamp(26px, 7vw, 34px)/1.05 var(--display); text-wrap: balance; }
+.cuecard .cueA { font: 700 18px var(--body); color: var(--amber); }
+a.btn { display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 12px; font: 800 15px var(--body); text-decoration: none; padding: 0 12px; }
+a.btn.sp { background: #1ed760; color: #04190b; }
+a.btn.yt { background: #ff2a2a; color: #fff; }
+.cut { text-align: center; font: 800 26px var(--display); color: #14102a; background: var(--amber); border-radius: 14px; padding: 10px; animation: glow 1s ease-in-out infinite; }

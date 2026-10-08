@@ -103,6 +103,19 @@
         <p id="hTimer" class="timer" hidden></p>
         <p id="hRule" class="rule"></p>
       </div>
+      <p id="hCut" class="cut" hidden></p>
+      <div class="panel cuecard" id="hCue" hidden>
+        <p class="eyebrow">🤫 Solo para tus ojos</p>
+        <p class="cueT" id="cueTitle"></p>
+        <p class="cueA" id="cueArtist"></p>
+        <div class="row">
+          <a id="cueSp" class="btn sp" target="_blank" rel="noopener">Abrir en Spotify</a>
+          <a id="cueYt" class="btn yt" target="_blank" rel="noopener">Abrir en YouTube</a>
+        </div>
+        <p id="cueTip" class="tip"></p>
+        <button id="cueGo" class="primary go">▶ Ya suena</button>
+        <button id="cueSwap" class="ghost">No la encuentro: otra canción</button>
+      </div>
       <div id="hReveal" class="reveal" hidden></div>
       <div id="hOpts" class="opts host" hidden></div>
       <div class="transport" id="transport" hidden>
@@ -114,16 +127,20 @@
       <button id="revealBtn" class="ghost" hidden>Nadie acierta: mostrar la respuesta</button>
 
       <div class="panel" id="hRoundPanel">
-        <h3 class="step"><span>1</span>Modo de juego</h3>
+        <h3 class="step"><span>1</span>¿De dónde sale la música?</h3>
+        <div class="sources" id="sources"></div>
+        <p id="srcTip" class="tip"></p>
+        <h3 class="step"><span>2</span>Modo de juego</h3>
         <div class="modes" id="modes"></div>
         <p id="modeTip" class="tip" hidden></p>
-        <h3 class="step"><span>2</span>Elige el desafío</h3>
+        <h3 class="step"><span>3</span>Elige el desafío</h3>
         <div class="chcards" id="chCards"></div>
         <div class="chdetail" id="chDetail"><span class="ic" id="chDetailIc"></span><div><p class="n" id="chDetailN"></p><p class="d" id="chDetailD"></p></div></div>
-        <h3 class="step"><span>3</span>¿Qué hay que adivinar?</h3>
+        <h3 class="step"><span>4</span>¿Qué hay que adivinar?</h3>
         <div class="kinds" id="kinds"></div>
         <button id="openRound" class="primary go">Abrir ronda</button>
         <p id="manualTip" class="tip">Pon la canción en Spotify (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta. En modo manual los cortes los haces tú: un pitido doble te avisa cuándo parar. Para que la música se corte sola, conecta Spotify abajo.</p>
+        <p id="deckTip" class="tip" hidden>Al abrir la ronda te muestro qué canción poner. La buscas, le das play y tocas «Ya suena». Cuando alguien pulse, pausa la música.</p>
         <p id="spTip" class="tip" hidden>Al abrir la ronda suena una canción al azar de tu playlist. Se pausa sola cuando alguien pulsa.</p>
         <p id="roundErr" class="err" hidden></p>
       </div>
@@ -193,7 +210,7 @@
           <p class="tip" style="margin-top:6px">Ten la app de Spotify abierta en este móvil (con el parlante). Solo salen las playlists que son tuyas o colaborativas.</p>
           <div class="row" style="margin-top:10px">
             <button id="spUse" class="primary">Usar esta playlist</button>
-            <button id="spManual" class="ghost">Volver a modo manual</button>
+            <button id="spManual" class="ghost">Volver a los mazos de Temón</button>
           </div>
           <div class="linkbox">
             <label for="spLink">¿La playlist no es tuya? Pega su link
@@ -216,6 +233,7 @@
 <script src="vendor/qrcode.js"></script>
 <script src="spotify.js"></script>
 <script src="cassette.js"></script>
+<script src="decks.js"></script>
 <script src="fx.js"></script>
 <script src="app.js"></script>
 <script>
