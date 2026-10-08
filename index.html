@@ -44,11 +44,13 @@
   <!-- Jugador -->
   <section id="player" hidden>
     <div class="wrap" style="padding:0">
+      <div id="pDeck" class="small"></div>
       <div class="stage">
         <span id="pPill" class="pill">Conectando</span>
         <p id="pBig" class="big">Conectando a la sala…</p>
         <p id="pSmall" class="muted"></p>
         <p id="pTimer" class="timer" hidden></p>
+        <p id="pRule" class="rule"></p>
       </div>
       <div id="pReveal" class="reveal" hidden></div>
       <button id="buzz" class="buzzer" disabled>¡YA!</button>
@@ -76,26 +78,24 @@
         <p id="hostErr" class="err" hidden></p>
       </div>
 
+      <div id="hDeck"></div>
       <div class="stage">
         <span id="hPill" class="pill">Sala abierta</span>
         <p id="hBig" class="big">Esperando jugadores</p>
         <p id="hSmall" class="muted"></p>
         <p id="hTimer" class="timer" hidden></p>
+        <p id="hRule" class="rule"></p>
       </div>
       <div id="hReveal" class="reveal" hidden></div>
 
       <div class="panel" id="hRoundPanel">
-        <p class="eyebrow">Próxima ronda: ¿qué hay que adivinar?</p>
+        <p class="eyebrow">Desafío de la próxima ronda</p>
+        <div class="chcards" id="chCards"></div>
+        <p class="eyebrow">¿Qué hay que adivinar?</p>
         <div class="chips" id="kinds"></div>
-        <p class="eyebrow">Desafíos</p>
-        <p class="sublabel">Cuánto se escucha la canción</p>
-        <div class="chips" id="snippetChips"></div>
-        <p class="sublabel">Tiempo para pulsar</p>
-        <div class="chips" id="limitChips"></div>
-        <label class="check" for="cutOnBuzz"><input id="cutOnBuzz" type="checkbox" checked> Cortar la música cuando alguien pulsa</label>
         <button id="openRound" class="primary">Abrir ronda</button>
         <button id="replay" class="ghost" hidden>Repetir fragmento</button>
-        <p id="manualTip" class="tip">Pon la canción en Spotify (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta. En modo manual los cortes los haces tú: si eliges un fragmento, un pitido doble te avisa cuándo parar. Para que la música se corte sola, conecta Spotify abajo.</p>
+        <p id="manualTip" class="tip">Pon la canción en Spotify (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta. En modo manual los cortes los haces tú: un pitido doble te avisa cuándo parar. Para que la música se corte sola, conecta Spotify abajo.</p>
         <p id="spTip" class="tip" hidden>Al abrir la ronda suena una canción al azar de tu playlist. Se pausa sola cuando alguien pulsa.</p>
         <p id="roundErr" class="err" hidden></p>
       </div>
@@ -157,6 +157,7 @@
 <script src="vendor/peerjs.min.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script src="spotify.js"></script>
+<script src="cassette.js"></script>
 <script src="app.js"></script>
 <script>
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

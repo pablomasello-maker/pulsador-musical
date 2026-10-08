@@ -111,9 +111,9 @@ window.Spotify = (() => {
   const noDevice = (e) => e.status === 404 || e.reason === "NO_ACTIVE_DEVICE";
   const deviceMsg = "Abre la app de Spotify en este móvil, pon cualquier canción un segundo y vuelve aquí.";
 
-  async function play(track) {
-    // Empieza a un tercio de la canción para saltar intros largas.
-    const pos = track.ms > 90000 ? Math.floor(track.ms * 0.3) : 0;
+  async function play(track, pos) {
+    // Por defecto empieza a un tercio de la canción para saltar intros largas.
+    if (typeof pos !== "number") pos = track.ms > 90000 ? Math.floor(track.ms * 0.3) : 0;
     try { await api("/me/player/play", { method: "PUT", body: JSON.stringify({ uris: [track.uri], position_ms: pos }) }); }
     catch (e) { if (noDevice(e)) throw new Error(deviceMsg); throw e; }
   }

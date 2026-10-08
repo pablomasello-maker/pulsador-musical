@@ -110,3 +110,42 @@ code { font-size: 13px; background: #0e1024; padding: 2px 6px; border-radius: 6p
 .sublabel { font-size: 14px; font-weight: 600; color: var(--muted); margin-bottom: -4px; }
 .timer { font: 800 44px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--amber); }
 .timer.low { color: var(--red); }
+
+/* ---- Cassette ---- */
+.deck { width: 100%; max-width: 320px; margin: 0 auto; perspective: 600px; }
+.deck svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 14px 22px rgba(0,0,0,.45)); }
+.deck .shell { fill: #262a4f; stroke: #3b4078; stroke-width: 2; }
+.deck .screw { fill: #151833; stroke: #4a508c; stroke-width: 1.5; }
+.deck .label { fill: var(--amber); transition: fill .3s; }
+.deck .label-title { font: 800 19px var(--display); fill: #16120a; }
+.deck .label-sub { font: 700 11.5px var(--body); fill: rgba(22,18,10,.75); letter-spacing: .02em; }
+.deck .label-side { font: 800 20px var(--display); fill: rgba(22,18,10,.55); }
+.deck .window-rim { fill: rgba(0,0,0,.22); }
+.deck .window { fill: #0d0e1f; }
+.deck .tape-wound { fill: #4a2f1c; stroke: #2b1a0e; stroke-width: 1; transition: r .25s linear; }
+.deck .tape-line { stroke: #4a2f1c; stroke-width: 3; }
+.deck .hub { fill: #e9e6dc; }
+.deck .tooth, .deck .spoke { fill: #e9e6dc; }
+.deck .hub-hole { fill: #0d0e1f; }
+.deck .mouth { fill: #1d2042; stroke: #3b4078; stroke-width: 2; }
+.deck .hole { fill: #0d0e1f; }
+.deck .reel { transform-box: fill-box; transform-origin: center; animation: reelspin 1.4s linear infinite; animation-play-state: paused; }
+.deck.playing .reel { animation-play-state: running; }
+@keyframes reelspin { to { transform: rotate(-360deg); } }
+.deck.inserting svg { animation: insert .75s cubic-bezier(.2,.9,.25,1.15) both; }
+@keyframes insert { 0% { transform: translateY(-70px) rotateX(35deg); opacity: 0; } 70% { transform: translateY(5px) rotateX(0); opacity: 1; } 100% { transform: none; } }
+.deck.flipping .label-g { transform-box: fill-box; transform-origin: center; animation: labelflip .45s ease-out; }
+@keyframes labelflip { 0% { transform: scaleY(1); } 45% { transform: scaleY(.05); } 100% { transform: scaleY(1); } }
+.deck.small { max-width: 220px; }
+@media (prefers-reduced-motion: reduce) { .deck .reel, .deck.inserting svg, .deck.flipping .label-g { animation: none !important; } }
+
+/* ---- Tarjetas de desafío ---- */
+.chcards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.chcard { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px; min-height: 0; border-radius: 12px;
+  background: #15183a; border: 2px solid transparent; position: relative; overflow: hidden; }
+.chcard::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 6px; background: var(--c, var(--amber)); }
+.chcard .n { font: 800 16px var(--display); color: var(--fg); margin-top: 4px; }
+.chcard .d { font: 500 13px/1.3 var(--body); color: var(--muted); }
+.chcard[aria-pressed="true"] { border-color: var(--c, var(--amber)); background: #1f2350; }
+.chcard.wide { grid-column: 1 / -1; }
+.rule { font-size: 14px; color: var(--muted); text-align: center; text-wrap: balance; }
