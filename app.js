@@ -2,7 +2,6 @@
 // El móvil anfitrión es el árbitro: decide el orden de los pulsadores por orden de llegada.
 (() => {
   const $ = (id) => document.getElementById(id);
-  const PREFIX = "pulsador-musical-v1-";
   const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // sin I ni O para no confundir
   const KINDS = { cancion: ["Canción", 1], artista: ["Artista", 1], disco: ["Disco", 2], anio: ["Año", 2] };
   const MAX_PLAYERS = 24;
@@ -31,14 +30,7 @@
 
   // Servidor de señalización: el público de PeerJS por defecto; ?peerhost=... para pruebas locales.
   const params = new URLSearchParams(location.search);
-  const peerOpts = {};
-  const testParams = ["peerhost", "peerport", "peersecure"].filter((k) => params.has(k));
-  if (params.has("peerhost")) {
-    peerOpts.host = params.get("peerhost");
-    peerOpts.port = Number(params.get("peerport") || 443);
-    peerOpts.secure = params.get("peersecure") !== "0";
-    peerOpts.path = "/";
-  }
+  const testParams = ["broker"].filter((k) => params.has(k));
 
   let pid = ls.get("pm_pid");
   if (!pid || !/^p[a-z0-9]{8,}$/.test(pid)) { pid = "p" + Math.random().toString(36).slice(2, 12).padEnd(10, "0"); ls.set("pm_pid", pid); }
@@ -47,7 +39,7 @@
 
   let role = null;
   let myName = "";
-  let peer = null;
+  let net = null;
 
   // ---------- Sonido (sale por el parlante del anfitrión) ----------
   let ac = null;
@@ -203,7 +195,7 @@
   const H = { phase: "lobby", round: 0, kind: "cancion", pick: "clasico", ch: "clasico", roulette: false, playing: false, lim: 0,
     done: [], year: null, results: null,
     queue: [], locked: [], bl: {}, scores: {}, names: {}, last: null, reveal: null, timeout: false, online: [] };
-  const conns = new Map(); // conn.peer -> { conn, pid }
+  const conns = new Map(); // id de pestaña del jugador -> { pid, seen }
   let penalty = false;
   let code = null;
   let music = "manual"; // "manual" | "spotify"
@@ -230,33 +222,36 @@
     }
     code = (saved && saved.code) || randomCode();
     $("redirectUri").textContent = Spotify.redirectUri();
-    openPeer();
+    openRoom();
     renderHost();
     initSpotifyPanel(saved);
   }
 
-  function openPeer() {
-    if (peer) try { peer.destroy(); } catch {}
-    show($("hostErr"), "");
+  function openRoom() {
+    if (net) net.close();
     $("roomCode").textContent = "····";
-    peer = new Peer(PREFIX + code, peerOpts);
-    peer.on("open", () => { showShare(); saveHost(); });
-    peer.on("connection", onConnection);
-    peer.on("disconnected", () => { try { peer.reconnect(); } catch {} });
-    peer.on("error", (e) => {
-      if (e.type === "unavailable-id") { code = randomCode(); openPeer(); return; }
-      if (e.type === "peer-unavailable") return;
-      show($("hostErr"), e.type === "network" || e.type === "server-error" || e.type === "socket-error"
-        ? "No hay conexión con el servidor de salas. Revisa internet; reintentando…"
-        : "Problema con la sala (" + e.type + ").");
-      if (e.type === "network" || e.type === "server-error" || e.type === "socket-error") setTimeout(() => { if (peer && (peer.destroyed || peer.disconnected)) openPeer(); }, 4000);
-    });
+    show($("hostErr"), "");
+    net = Net.open({
+      onUp: () => { show($("hostErr"), ""); showShare(); publish(); },
+      onDown: () => show($("hostErr"), "Sin conexión con el servidor de salas. Reintentando…"),
+      onMessage: (topic, d) => { if (topic === code + "/up") onPlayerMsg(d); },
+    }, { broker: Number(ss.get("pm_broker")) || 0 });
+    net.sub(code + "/up");
   }
+
+  // Jugadores vistos hace poco: si un móvil deja de dar señales 15 s, sale como desconectado.
+  setInterval(() => {
+    if (role !== "host") return;
+    let changed = false;
+    for (const [k, v] of conns) if (Date.now() - v.seen > 15000) { conns.delete(k); changed = true; }
+    if (changed) publish(); else sendState(); // latido: mantiene viva la sala para los que entran
+  }, 4000);
 
   function showShare() {
     $("roomCode").textContent = code;
     const extra = testParams.map((k) => `&${k}=${encodeURIComponent(params.get(k))}`).join("");
-    const url = `${location.origin}${location.pathname}?sala=${code}${extra}`;
+    ss.set("pm_broker", net.broker());
+    const url = `${location.origin}${location.pathname}?sala=${code}&s=${net.broker()}${extra}`;
     $("joinLink").textContent = url;
     $("copyLink").onclick = async () => {
       try { await navigator.clipboard.writeText(url); $("copyLink").textContent = "Enlace copiado"; }
@@ -269,28 +264,28 @@
     } catch { $("qr").hidden = true; }
   }
 
-  function onConnection(conn) {
-    conn.on("data", (d) => onPlayerMsg(conn, d));
-    conn.on("close", () => { conns.delete(conn.peer); publish(); });
-    conn.on("error", () => { conns.delete(conn.peer); publish(); });
-  }
-
-  function onPlayerMsg(conn, d) {
-    if (!d || typeof d !== "object") return;
+  function onPlayerMsg(d) {
+    if (!d || typeof d !== "object" || typeof d.cid !== "string" || !/^c[a-z0-9]{8,20}$/.test(d.cid)) return;
+    const cid = d.cid;
     if (d.t === "hello") {
       const id = typeof d.pid === "string" && /^p[a-z0-9]{8,20}$/.test(d.pid) ? d.pid : null;
       if (!id) return;
-      if (!(id in H.scores) && Object.keys(H.scores).length >= MAX_PLAYERS) { conn.send({ t: "full" }); setTimeout(() => conn.close(), 500); return; }
-      // Si el mismo jugador vuelve a entrar, cerramos su conexión vieja.
-      for (const [k, v] of conns) if (v.pid === id && k !== conn.peer) { try { v.conn.close(); } catch {} conns.delete(k); }
-      conns.set(conn.peer, { conn, pid: id });
-      H.names[id] = clean(d.name) || "Jugador";
-      if (!(id in H.scores)) H.scores[id] = 0;
-      publish();
+      if (!(id in H.scores) && Object.keys(H.scores).length >= MAX_PLAYERS) { net.pub(code + "/down", { t: "full", to: cid }); return; }
+      const known = conns.get(cid);
+      // Si el mismo jugador entra desde otra pestaña, nos quedamos con la nueva.
+      for (const [k, v] of conns) if (v.pid === id && k !== cid) conns.delete(k);
+      conns.set(cid, { pid: id, seen: Date.now() });
+      const name = clean(d.name) || "Jugador";
+      if (!known || H.names[id] !== name || !(id in H.scores)) {
+        H.names[id] = name;
+        if (!(id in H.scores)) H.scores[id] = 0;
+        publish();
+      }
       return;
     }
-    const c = conns.get(conn.peer);
+    const c = conns.get(cid);
     if (!c) return;
+    c.seen = Date.now();
     if (d.t === "guess" && d.round === H.round && H.phase === "open" && cfg().guess) {
       const y = Number(d.year);
       if (!Number.isInteger(y) || y < 1900 || y > 2030 || H.done.includes(c.pid)) return;
@@ -312,13 +307,16 @@
     }
   }
 
+  function sendState() {
+    if (!net) return;
+    H.online = [...new Set([...conns.values()].map((c) => c.pid))];
+    const st = { ...H, left: H.running ? Math.max(0, deadline - Date.now()) : H.left, t: Date.now() };
+    delete st.bl;
+    net.pub(code + "/down", { t: "state", st }, true);
+  }
   function publish() {
     if (role !== "host") return;
-    H.online = [...new Set([...conns.values()].map((c) => c.pid))];
-    const st = { ...H, left: H.running ? Math.max(0, deadline - Date.now()) : H.left };
-    delete st.bl;
-    const msg = { t: "state", st };
-    for (const { conn } of conns.values()) { try { if (conn.open) conn.send(msg); } catch {} }
+    sendState();
     saveHost();
     renderHost();
   }
@@ -558,13 +556,11 @@
   // =====================================================================
   // JUGADOR
   // =====================================================================
-  let conn = null;
   let st = null;
+  let lastStateAt = 0;
   let pressedRound = -1;
   let lastFirst = null;
-  let retries = 0;
   let joinCode = null;
-  let connectTimer = null;
   let pDeadline = null;
   let pDeck = null;
   setInterval(() => {
@@ -581,52 +577,49 @@
     connectPlayer();
   }
 
+  const online = () => !!net && net.connected() && Date.now() - lastStateAt < 20000;
+  const send = (obj) => !!net && net.pub(joinCode + "/up", { ...obj, cid: net.cid });
+
   function connectPlayer() {
-    clearTimeout(connectTimer);
     $("retry").hidden = true;
-    setStage("p", "", "Conectando", `Entrando a la sala ${joinCode}…`, "");
+    setStage("p", "", "Conectando", `Entrando a la sala ${joinCode}…`, "Buscando la sala…");
     renderPlayer();
-    if (peer) try { peer.destroy(); } catch {}
-    peer = new Peer(peerOpts);
-    connectTimer = setTimeout(() => { if (!conn || !conn.open) failed("No se pudo conectar. Comprueba el código y que el anfitrión tenga la sala abierta."); }, 15000);
-    peer.on("open", () => {
-      conn = peer.connect(PREFIX + joinCode, { reliable: true });
-      conn.on("open", () => { clearTimeout(connectTimer); retries = 0; conn.send({ t: "hello", pid, name: myName }); });
-      conn.on("data", (d) => {
-        if (!d || typeof d !== "object") return;
-        if (d.t === "full") { failed("La sala está llena."); return; }
-        if (d.t === "state" && d.st && typeof d.st === "object") {
-          st = d.st;
+    if (net) net.close();
+    const fresh = (o, retained) => o.t === "state" && o.st && (!retained || Math.abs(Date.now() - (o.st.t || 0)) < 120000);
+    net = Net.open({
+      onUp: () => { send({ t: "hello", pid, name: myName }); },
+      onDown: () => { if (st) setStage("p", "", "Reconectando", "Se perdió la conexión", "Reintentando…"); },
+      onNotFound: () => failed(`No encuentro ninguna sala abierta con el código ${joinCode}. Revisa el código y que el anfitrión tenga la página abierta.`),
+      onMessage: (topic, d, retained) => {
+        if (topic !== joinCode + "/down") return;
+        if (d.t === "full" && d.to === net.cid) { failed("La sala está llena."); net.close(); return; }
+        if (fresh(d, retained) && typeof d.st === "object") {
+          st = d.st; lastStateAt = Date.now();
           pDeadline = st.running && typeof st.left === "number" ? Date.now() + st.left : null;
           renderPlayer();
         }
-      });
-      conn.on("close", () => lost());
-      conn.on("error", () => lost());
-    });
-    peer.on("error", (e) => {
-      if (e.type === "peer-unavailable") failed(`No hay ninguna sala abierta con el código ${joinCode}.`);
-      else lost();
-    });
+      },
+    }, { broker: Number(params.get("s")) || 0, probe: { topic: joinCode + "/down", accept: fresh, timeout: 6000 } });
+    net.sub(joinCode + "/down");
   }
+  // Señal de vida cada 4 s (el anfitrión también la usa para volver a añadirte si recarga).
+  setInterval(() => {
+    if (role !== "player" || !net || !net.connected()) return;
+    send({ t: "hello", pid, name: myName });
+    if (st && Date.now() - lastStateAt > 15000) { setStage("p", "", "Reconectando", "No llega señal del anfitrión", "¿Sigue abierta la sala en su móvil?"); $("buzz").disabled = true; }
+  }, 4000);
   function failed(msg) {
-    clearTimeout(connectTimer);
     setStage("p", "", "Sin conexión", "No se pudo entrar", msg);
     $("buzz").disabled = true; $("retry").hidden = false;
   }
-  function lost() {
-    if (role !== "player") return;
-    if (retries < 5) { retries += 1; setStage("p", "", "Reconectando", "Se perdió la conexión", "Reintentando…"); $("buzz").disabled = true; setTimeout(connectPlayer, 2000 * retries); }
-    else failed("Se perdió la conexión con el anfitrión.");
-  }
-  $("retry").onclick = () => { retries = 0; connectPlayer(); };
+  $("retry").onclick = () => connectPlayer();
 
   $("buzz").addEventListener("pointerdown", (e) => { e.preventDefault(); press(); });
   $("buzz").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(); } });
   function press() {
-    if (!st || !conn || !conn.open || $("buzz").disabled) return;
+    if (!st || !online() || $("buzz").disabled) return;
     pressedRound = st.round;
-    try { conn.send({ t: "buzz", round: st.round }); } catch {}
+    send({ t: "buzz", round: st.round });
     vibrate(60);
     renderPlayer();
     $("buzz").classList.add("pressed");
@@ -655,8 +648,8 @@
   $("yMinus10").onclick = () => setYear(pickYear - 10, true);
   $("yPlus10").onclick = () => setYear(pickYear + 10, true);
   $("ySend").onclick = () => {
-    if (!st || !conn || !conn.open || st.phase !== "open") return;
-    try { conn.send({ t: "guess", round: st.round, year: pickYear }); } catch { return; }
+    if (!st || !online() || st.phase !== "open") return;
+    if (!send({ t: "guess", round: st.round, year: pickYear })) return;
     sentRound = st.round; vibrate(60); renderPlayer();
   };
 
@@ -664,7 +657,7 @@
     if (role !== "player") return;
     const btn = $("buzz");
     btn.classList.remove("pressed", "live");
-    if (!st || !conn || !conn.open) { btn.disabled = true; renderScores($("pScores"), { scores: {} }, pid, []); renderReveal($("pReveal"), null); return; }
+    if (!st || !online()) { btn.disabled = true; renderScores($("pScores"), { scores: {} }, pid, []); renderReveal($("pReveal"), null); return; }
     const kindLabel = (KINDS[st.kind] || KINDS.cancion)[0];
     const queue = Array.isArray(st.queue) ? st.queue : [];
     const locked = Array.isArray(st.locked) ? st.locked : [];
