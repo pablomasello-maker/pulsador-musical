@@ -46,6 +46,7 @@
     <div class="wrap" style="padding:0">
       <div id="pDeck" class="small"></div>
       <div class="stage">
+        <div id="pMascot" class="mascot" aria-hidden="true"></div>
         <span id="pPill" class="pill">Conectando</span>
         <p id="pBig" class="big">Conectando a la sala…</p>
         <p id="pSmall" class="muted"></p>
@@ -53,6 +54,7 @@
         <p id="pRule" class="rule"></p>
       </div>
       <div id="pReveal" class="reveal" hidden></div>
+      <div id="pOpts" class="opts" hidden></div>
       <button id="buzz" class="buzzer" disabled>¡YA!</button>
       <div class="panel yearpick" id="pYear" hidden>
         <p class="eyebrow">¿De qué año es la canción?</p>
@@ -93,6 +95,7 @@
 
       <div id="hDeck"></div>
       <div class="stage">
+        <div id="hMascot" class="mascot" aria-hidden="true"></div>
         <span id="hPill" class="pill">Sala abierta</span>
         <p id="hBig" class="big">Esperando jugadores</p>
         <p id="hSmall" class="muted"></p>
@@ -100,14 +103,24 @@
         <p id="hRule" class="rule"></p>
       </div>
       <div id="hReveal" class="reveal" hidden></div>
+      <div id="hOpts" class="opts host" hidden></div>
+      <div class="transport" id="transport" hidden>
+        <button id="tPlay" type="button" aria-label="Reproducir o pausar"><span class="ic">▶</span><span>Play</span></button>
+        <button id="tStop" type="button" aria-label="Parar"><span class="ic">■</span><span>Stop</span></button>
+        <button id="tReplay" type="button" aria-label="Repetir"><span class="ic">↺</span><span>Repetir</span></button>
+        <button id="tNext" type="button" aria-label="Siguiente canción"><span class="ic">⏭</span><span>Siguiente</span></button>
+      </div>
+      <button id="revealBtn" class="ghost" hidden>Nadie acierta: mostrar la respuesta</button>
 
       <div class="panel" id="hRoundPanel">
+        <p class="eyebrow">Modo de juego</p>
+        <div class="modes" id="modes"></div>
+        <p id="modeTip" class="tip" hidden></p>
         <p class="eyebrow">Desafío de la próxima ronda</p>
         <div class="chcards" id="chCards"></div>
         <p class="eyebrow">¿Qué hay que adivinar?</p>
         <div class="chips" id="kinds"></div>
         <button id="openRound" class="primary">Abrir ronda</button>
-        <button id="replay" class="ghost" hidden>Repetir fragmento</button>
         <p id="manualTip" class="tip">Pon la canción en Spotify (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta. En modo manual los cortes los haces tú: un pitido doble te avisa cuándo parar. Para que la música se corte sola, conecta Spotify abajo.</p>
         <p id="spTip" class="tip" hidden>Al abrir la ronda suena una canción al azar de tu playlist. Se pausa sola cuando alguien pulsa.</p>
         <p id="roundErr" class="err" hidden></p>
@@ -193,6 +206,7 @@
 <script src="vendor/qrcode.js"></script>
 <script src="spotify.js"></script>
 <script src="cassette.js"></script>
+<script src="fx.js"></script>
 <script src="app.js"></script>
 <script>
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

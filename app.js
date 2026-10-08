@@ -14,8 +14,27 @@
     subita: { name: "Muerte súbita", color: "#ff5a4e", rule: "Un solo intento: si el primero falla, se acaba la ronda.", oneTry: true },
     aguja: { name: "Aguja loca", color: "#3ddc97", rule: "Empieza en cualquier parte de la canción y suenan 8 segundos.", snippet: 8, randomStart: true, manual: "Ponla desde la mitad o donde quieras." },
     anio: { name: "Año exacto", color: "#ff7ac6", rule: "Todos eligen el año de la canción. Exacto: 3 puntos. A 2 años o menos: 2. A 5 o menos: 1.", limit: 25, guess: true },
-    ruleta: { name: "Ruleta de desafíos", color: "#e9e6dc", rule: "Cada ronda toca un desafío al azar. Nadie sabe cuál hasta que entra el cassette.", meta: true },
+    ruleta: { name: "Ruleta de desafíos", color: "#e9e6dc", rule: "Cada ronda gira la ruleta y toca un desafío al azar.", meta: true },
   };
+  const MODES = {
+    normal: { name: "Normal", d: "Salen 4 opciones en cada móvil y se toca la correcta. Para que juegue cualquiera." },
+    pro: { name: "Profesional", d: "Sin opciones: pulsas y respondes en voz alta. Para expertos." },
+  };
+  const FIELD = { cancion: "title", artista: "artist", disco: "album", anio: "year" };
+  const mascotKind = (st) => ((CH[st.ch] || {}).guess ? "anio" : KINDS[st.kind] ? st.kind : "cancion");
+  // Pone el personaje de la categoría en el escenario (solo lo redibuja si cambia).
+  function setMascot(el, kind, mood, bounce) {
+    const key = kind + mood;
+    if (el.dataset.k !== key) { el.innerHTML = Fx.mascot(kind, mood); el.dataset.k = key; }
+    el.classList.toggle("bounce", !!bounce);
+  }
+  const wheelItems = () => Object.entries(CH).filter(([, x]) => !x.meta).map(([id, x]) => ({ id, name: x.name, color: x.color }));
+  // Al empezar una ronda: ruleta si toca, si no un cartel con la categoría.
+  function roundFx(st) {
+    const kind = mascotKind(st), c = CH[st.ch] || CH.clasico;
+    if (st.roulette) { const items = wheelItems(); Fx.wheel(items, Math.max(0, items.findIndex((x) => x.id === st.ch))); return; }
+    Fx.banner(`Ronda ${st.round}`, c.guess ? c.name : `${c.name} · Adivina: ${(KINDS[st.kind] || KINDS.cancion)[0]}`, kind, "happy", c.color === "#e9e6dc" ? "#ffb627" : c.color);
+  }
 
   const ls = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -56,8 +75,6 @@
   }
   const sfx = {
     buzz: () => tone([[220, 0.45, "sawtooth", 0.22]]),
-    right: () => tone([[660, 0.12, "triangle", .25], [880, 0.12, "triangle", .25], [1320, 0.3, "triangle", .25]]),
-    wrong: () => tone([[180, 0.25, "square", .2], [120, 0.45, "square", .2]]),
     open: () => tone([[523, 0.08, "sine", .2], [784, 0.14, "sine", .2]]),
     cut: () => tone([[880, 0.1, "square", .2], [0.01, 0.06, "sine", 0.0001], [880, 0.1, "square", .2]]),
   };
@@ -188,12 +205,47 @@
     el.replaceChildren(...parts); el.hidden = false;
   }
 
+  // Las 4 opciones: se crean una vez por ronda y luego solo cambian de estado.
+  function renderOpts(el, st, me, onPick) {
+    const live = st.phase === "open" || st.phase === "answering";
+    const vis = Array.isArray(st.opts) && st.opts.length && (live || st.phase === "reveal");
+    el.hidden = !vis;
+    if (!vis) return;
+    const key = st.round + "|" + st.opts.join("|");
+    if (el.dataset.k !== key) {
+      el.dataset.k = key;
+      el.replaceChildren(...st.opts.map((o, i) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "opt c" + i;
+        const l = document.createElement("span"); l.className = "ol"; l.textContent = "ABCD"[i];
+        const t = document.createElement("span"); t.className = "ot"; t.textContent = o;
+        const w = document.createElement("span"); w.className = "ow";
+        b.append(l, t, w);
+        if (onPick) b.onclick = () => onPick(i);
+        return b;
+      }));
+    }
+    const picks = st.picks || {}, locked = Array.isArray(st.locked) ? st.locked : [];
+    const mine = me ? (me in picks ? picks[me] : myPick.round === st.round ? myPick.i : null) : null;
+    const can = !!onPick && st.phase === "open" && mine == null && !locked.includes(me);
+    [...el.children].forEach((b, i) => {
+      const who = Object.keys(picks).filter((id) => picks[id] === i);
+      b.classList.toggle("right", st.phase === "reveal" && st.answer === i);
+      b.classList.toggle("wrong", who.some((id) => locked.includes(id)) && (st.phase === "reveal" || !me || who.includes(me)));
+      b.classList.toggle("mine", mine === i);
+      b.classList.toggle("dim", st.phase === "reveal" && st.answer !== i);
+      b.disabled = !can;
+      // Los nombres de quién eligió cada opción: el anfitrión siempre, los jugadores al final.
+      b.lastChild.textContent = (!me || st.phase === "reveal") && who.length ? who.map((id) => nameOf(st, id)).join(", ") : "";
+    });
+  }
+
   // =====================================================================
   // ANFITRIÓN
   // =====================================================================
   const guesses = {}; // pid -> año (solo lo sabe el anfitrión hasta el final)
   const H = { phase: "lobby", round: 0, kind: "cancion", pick: "clasico", ch: "clasico", roulette: false, playing: false, lim: 0,
-    done: [], year: null, results: null,
+    done: [], year: null, results: null, mode: "normal", rmode: "pro", opts: null, picks: {}, answer: null, rebound: false, ev: 0, evt: null,
     queue: [], locked: [], bl: {}, scores: {}, names: {}, last: null, reveal: null, timeout: false, online: [] };
   const conns = new Map(); // id de pestaña del jugador -> { pid, seen }
   let penalty = false;
@@ -202,10 +254,12 @@
   let tracks = [];
   let played = new Set();
   let current = null;
+  let answerIdx = null; // opción correcta: solo la sabe el anfitrión hasta el final
+  let stopped = false;
 
   const randomCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 
-  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, penalty, music, playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
+  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, answerIdx, penalty, music, playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
   function startHost(saved) {
     role = "host";
@@ -214,10 +268,12 @@
       Object.assign(H, saved.H || {});
       if (!CH[H.pick]) H.pick = "clasico";
       if (!CH[H.ch]) H.ch = "clasico";
-      H.bl = H.bl || {};
+      H.bl = H.bl || {}; H.picks = H.picks || {};
+      if (!MODES[H.mode]) H.mode = "normal";
+      answerIdx = saved.answerIdx ?? null;
       penalty = !!saved.penalty; $("penalty").checked = penalty;
       played = new Set(saved.played || []);
-      if (H.phase === "open" || H.phase === "answering") { H.phase = "reveal"; H.queue = []; H.reveal = null; }
+      if (H.phase === "open" || H.phase === "answering") { H.phase = "reveal"; H.queue = []; H.reveal = null; H.answer = answerIdx; }
       H.left = null; H.running = false; H.playing = false;
     }
     code = (saved && saved.code) || randomCode();
@@ -293,7 +349,15 @@
       if (H.online.length && H.online.every((id) => H.done.includes(id))) finishGuess(); else publish();
       return;
     }
-    if (d.t === "buzz" && cfg().guess) return;
+    if (d.t === "pick" && d.round === H.round && H.phase === "open" && Array.isArray(H.opts)) {
+      const i = Number(d.i);
+      if (!Number.isInteger(i) || i < 0 || i >= H.opts.length || c.pid in H.picks || H.locked.includes(c.pid)) return;
+      H.picks[c.pid] = i;
+      if (i === answerIdx) award(c.pid, H.running ? Math.max(0, deadline - Date.now()) : (H.left || 0));
+      else miss(c.pid);
+      return;
+    }
+    if (d.t === "buzz" && (cfg().guess || H.opts)) return;
     if (d.t === "buzz" && d.round === H.round && (H.phase === "open" || H.phase === "answering")) {
       if (H.queue.includes(c.pid) || H.locked.includes(c.pid)) return;
       H.queue.push(c.pid);
@@ -330,6 +394,17 @@
     kindsEl.appendChild(b);
   }
 
+  // ---------- Modo de juego ----------
+  for (const [id, m] of Object.entries(MODES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "mode m-" + id; b.dataset.mode = id;
+    const n = document.createElement("span"); n.className = "n"; n.textContent = m.name;
+    const d = document.createElement("span"); d.className = "d"; d.textContent = m.d;
+    b.append(n, d);
+    b.onclick = () => { H.mode = id; saveHost(); renderHost(); };
+    $("modes").appendChild(b);
+  }
+
   // ---------- Desafíos ----------
   for (const [id, c] of Object.entries(CH)) {
     const b = document.createElement("button");
@@ -363,7 +438,7 @@
     if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
     if (H.running && H.phase === "open" && Date.now() >= deadline) {
       endRound(); H.phase = "reveal"; H.last = null; H.timeout = true; H.queue = [];
-      revealNow(); sfx.wrong(); publish(); return;
+      revealNow(); ev("timeout"); publish(); return;
     }
     const left = H.running ? deadline - Date.now() : H.left;
     renderTimer($("hTimer"), left, H.phase);
@@ -372,13 +447,114 @@
 
   async function playCurrent() {
     await Spotify.play(current, current.pos);
-    H.playing = true; startSnippet();
+    H.playing = true; stopped = false; startSnippet();
   }
-  $("replay").onclick = async () => {
-    if (!current || music !== "spotify") return;
+
+  // ---------- Controles de música del anfitrión (Spotify) ----------
+  async function transport(fn) {
     show($("roundErr"), "");
-    try { await playCurrent(); publish(); } catch (e) { show($("roundErr"), e.message); }
-  };
+    try { await fn(); } catch (e) { show($("roundErr"), e.message); }
+    publish();
+  }
+  $("tPlay").onclick = () => transport(async () => {
+    if (!current) return;
+    if (H.playing) { clearTimeout(snippetTimer); H.playing = false; await Spotify.pause(); }
+    else if (stopped || cfg().snippet) await playCurrent();
+    else { await Spotify.resume(); H.playing = true; }
+  });
+  $("tStop").onclick = () => transport(async () => { clearTimeout(snippetTimer); H.playing = false; stopped = true; await Spotify.pause(); });
+  $("tReplay").onclick = () => transport(async () => { if (current) await playCurrent(); });
+  $("tNext").onclick = () => $("openRound").click();
+  $("revealBtn").onclick = () => $("skip").onclick();
+
+  // ---------- Opciones de respuesta (modo Normal) ----------
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  // Quita los "- Remastered 2011", "(feat. ...)" y similares para que las opciones se lean bien.
+  const tidy = (v) => String(v || "").replace(/\s+-\s+[^-]*\b(remaster(ed)?|version|versión|live|en vivo|mono|stereo|edit|mix|remix)\b.*$/i, "")
+    .replace(/\s*[(\[](feat|ft|with|con)\.?\s[^)\]]*[)\]]/i, "").trim().slice(0, 70);
+  const norm = (v) => tidy(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  function buildOptions(t) {
+    const f = FIELD[H.kind];
+    const right = tidy(t[f]);
+    if (!right) return null;
+    let wrong = [];
+    if (f === "year") {
+      const y = Number(right), max = new Date().getFullYear();
+      if (!y) return null;
+      const set = new Set();
+      for (let n = 0; set.size < 3 && n < 200; n++) {
+        const v = y + (1 + Math.floor(Math.random() * 9)) * (Math.random() < 0.5 ? -1 : 1);
+        if (v <= max && v >= 1900) set.add(v);
+      }
+      wrong = [...set].map(String);
+    } else {
+      const seen = new Set([norm(right)]);
+      for (const x of shuffle(tracks.slice())) {
+        const v = tidy(x[f]), k = norm(v);
+        if (!k || seen.has(k)) continue;
+        seen.add(k); wrong.push(v);
+        if (wrong.length === 3) break;
+      }
+    }
+    if (wrong.length < 3) return null;
+    const opts = shuffle([right, ...wrong]);
+    return { opts, idx: opts.indexOf(right) };
+  }
+
+  // ---------- Aciertos, fallos y efectos ----------
+  function ev(type, pid, pts) {
+    H.ev = (H.ev || 0) + 1; H.evt = { type, pid: pid || null, pts: pts || 0 };
+    hostFx();
+  }
+  function hostFx() {
+    const e = H.evt; if (!e) return;
+    const kind = mascotKind(H), who = e.pid ? nameOf(H, e.pid) : "";
+    if (e.type === "win") Fx.win(`¡${who} acertó!`, `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind);
+    else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : "¡Rebote! Los demás tienen otra chance", kind);
+    else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
+    else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
+    else if (e.type === "year") {
+      const top = (H.results || [])[0];
+      if (top && top.pts) Fx.win(`Era ${H.year}`, `¡${nameOf(H, top.pid)} ${top.pts === 3 ? "lo clavó" : "estuvo cerca"}!`, "anio");
+      else Fx.lose(`Era ${H.year}`, "Nadie se acercó", "anio");
+    }
+  }
+  function award(id, leftMs) {
+    const c = cfg(), base = KINDS[H.kind][1];
+    let pts = base * (c.mult || 1);
+    if (c.speed && H.lim) pts += Math.max(1, Math.ceil(3 * (leftMs || 0) / H.lim));
+    H.scores[id] = (H.scores[id] || 0) + pts;
+    H.last = { pid: id, ok: true, pts }; H.phase = "reveal"; H.queue = [];
+    endRound(); revealNow(); ev("win", id, pts); publish();
+  }
+  function miss(id) {
+    const c = cfg(), base = KINDS[H.kind][1];
+    H.queue = H.queue.filter((x) => x !== id);
+    H.locked.push(id);
+    const minus = c.wrongMinus ? base * (c.mult || 1) : penalty ? 1 : 0;
+    if (minus) H.scores[id] = (H.scores[id] || 0) - minus;
+    H.last = { pid: id, ok: false, pts: -minus };
+    const stillIn = H.online.filter((x) => !H.locked.includes(x));
+    if (c.oneTry || (H.opts && !stillIn.length)) {
+      H.queue = []; H.phase = "reveal"; endRound(); revealNow(); ev("wrong", id); publish(); return;
+    }
+    H.phase = H.queue.length ? "answering" : "open";
+    if (!H.queue.length) rebound();
+    ev("wrong", id); publish();
+  }
+  // Rebote: tras un fallo, el resto tiene otra oportunidad. Vuelve la música (o el fragmento) y unos segundos más de reloj.
+  function rebound() {
+    H.rebound = true;
+    const extra = Math.min(H.lim, 8000);
+    if (H.lim && H.running && deadline - Date.now() < extra) deadline = Date.now() + extra;
+    if (H.lim && !H.running && H.left != null && H.left < extra) H.left = extra;
+    startClock();
+    if (H.playing) return;
+    if (cfg().snippet) {
+      if (music === "spotify" && current) playCurrent().then(publish).catch((e) => show($("roundErr"), e.message));
+      else { H.playing = true; startSnippet(); }
+    } else { H.playing = true; if (music === "spotify") Spotify.resume(); }
+  }
 
   $("openRound").onclick = async () => {
     show($("roundErr"), "");
@@ -401,16 +577,20 @@
       $("openRound").disabled = false;
       played.add(t.uri);
     } else { current = null; H.ch = ch; H.playing = true; startSnippet(); }
+    const o = H.mode === "normal" && !c.guess && current ? buildOptions(current) : null;
+    H.rmode = o ? "normal" : "pro"; H.opts = o ? o.opts : null; answerIdx = o ? o.idx : null;
+    H.picks = {}; H.answer = null; H.rebound = false;
     H.roulette = roulette;
     H.round += 1; H.queue = []; H.locked = []; H.bl = {}; H.last = null; H.reveal = null; H.timeout = false; H.phase = "open";
     H.done = []; H.year = null; H.results = null; for (const k of Object.keys(guesses)) delete guesses[k];
     clearClock();
     H.lim = c.limit ? c.limit * 1000 : 0;
     if (c.limit) { H.left = H.lim; startClock(); }
-    sfx.open(); publish();
+    publish(); roundFx(H);
   };
   const revealNow = () => {
     H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img } : null;
+    H.answer = H.opts ? answerIdx : null; stopped = false;
     if (current) { Spotify.resume(); H.playing = true; } else H.playing = false;
   };
   // Año exacto: al acabar el tiempo (o votar todos) se puntúa con el año de Spotify, o lo escribe el anfitrión.
@@ -426,7 +606,7 @@
       .sort((a, b) => b.pts - a.pts || Math.abs(a.year - y) - Math.abs(b.year - y));
     for (const r of H.results) H.scores[r.pid] = (H.scores[r.pid] || 0) + r.pts;
     H.phase = "reveal"; H.last = null; H.queue = [];
-    revealNow(); sfx.right(); publish();
+    revealNow(); ev("year"); publish();
   }
   $("closeGuess").onclick = () => { if (H.phase === "open" && cfg().guess) finishGuess(); };
   $("scoreYear").onclick = () => {
@@ -436,33 +616,12 @@
     scoreYear(y);
   };
 
-  $("right").onclick = () => {
-    const id = H.queue[0]; if (!id) return;
-    const c = cfg(), base = KINDS[H.kind][1];
-    let pts = base * (c.mult || 1);
-    if (c.speed && H.lim) pts += Math.max(1, Math.ceil(3 * (H.bl[id] || 0) / H.lim));
-    H.scores[id] = (H.scores[id] || 0) + pts;
-    H.last = { pid: id, ok: true, pts }; H.phase = "reveal"; H.queue = [];
-    endRound(); revealNow(); sfx.right(); publish();
+  $("right").onclick = () => { const id = H.queue[0]; if (id) award(id, H.bl[id]); };
+  $("wrong").onclick = () => { const id = H.queue[0]; if (id) miss(id); };
+  $("skip").onclick = () => {
+    if (!(H.phase === "open" || H.phase === "answering")) return;
+    H.phase = "reveal"; H.last = null; H.queue = []; endRound(); revealNow(); ev("nobody"); publish();
   };
-  $("wrong").onclick = () => {
-    const id = H.queue.shift(); if (!id) return;
-    const c = cfg(), base = KINDS[H.kind][1];
-    H.locked.push(id);
-    const minus = c.wrongMinus ? base * (c.mult || 1) : penalty ? 1 : 0;
-    if (minus) H.scores[id] = (H.scores[id] || 0) - minus;
-    H.last = { pid: id, ok: false, pts: -minus };
-    sfx.wrong();
-    if (c.oneTry) { H.queue = []; H.phase = "reveal"; endRound(); revealNow(); publish(); return; }
-    H.phase = H.queue.length ? "answering" : "open";
-    if (!H.queue.length) {
-      startClock();
-      // Sigue la canción, salvo en los desafíos de fragmento: ese ya se escuchó (se puede repetir con el botón).
-      if (!c.snippet) { H.playing = true; if (music === "spotify") Spotify.resume(); }
-    }
-    publish();
-  };
-  $("skip").onclick = () => { H.phase = "reveal"; H.last = null; H.queue = []; endRound(); revealNow(); publish(); };
   $("penalty").onchange = (e) => { penalty = e.target.checked; saveHost(); };
   $("resetScores").onclick = () => { $("resetConfirm").hidden = false; };
   $("resetNo").onclick = () => { $("resetConfirm").hidden = true; };
@@ -477,6 +636,8 @@
     const c = cfg();
     for (const b of kindsEl.children) b.setAttribute("aria-pressed", String(b.dataset.kind === H.kind));
     for (const b of $("chCards").children) b.setAttribute("aria-pressed", String(b.dataset.ch === H.pick));
+    for (const b of $("modes").children) b.setAttribute("aria-pressed", String(b.dataset.mode === H.mode));
+    show($("modeTip"), H.mode === "normal" && music !== "spotify" ? "Las opciones se arman con tu playlist de Spotify. Sin Spotify, las rondas se juegan en modo Profesional." : H.mode === "normal" ? "En Año exacto se sigue eligiendo el año con el contador." : "");
     $("hJudge").hidden = H.phase !== "answering";
     const guessing = !!c.guess && (H.phase === "open" || H.phase === "yearjudge");
     $("hYear").hidden = !guessing;
@@ -487,14 +648,23 @@
     renderResults($("hResults"), $("hResList"), $("hResTitle"), H, null);
     $("openRound").textContent = H.round === 0 ? "Abrir primera ronda" : (H.phase === "open" || H.phase === "answering") ? "Otra canción" : "Abrir siguiente ronda";
     $("manualTip").hidden = music === "spotify"; $("spTip").hidden = music !== "spotify";
-    $("replay").hidden = !(music === "spotify" && current && (H.phase === "open" || H.phase === "answering"));
-    $("replay").textContent = c.snippet ? `Repetir fragmento (${c.snippet} s)` : "Repetir desde el inicio";
     const live = H.phase === "open" || H.phase === "answering";
+    $("transport").hidden = !(music === "spotify" && current && H.phase !== "lobby");
+    $("tPlay").firstChild.textContent = H.playing ? "❚❚" : "▶";
+    $("tPlay").lastChild.textContent = H.playing ? "Pausa" : "Play";
+    $("tPlay").classList.toggle("on", !!H.playing);
+    $("tReplay").lastChild.textContent = c.snippet ? `Repetir ${c.snippet} s` : "Repetir";
+    $("revealBtn").hidden = !(H.phase === "open" && !c.guess);
+    renderOpts($("hOpts"), H, null, null);
+    const mk = mascotKind(H);
+    setMascot($("hMascot"), H.phase === "lobby" ? "cancion" : mk, H.phase === "answering" || H.phase === "yearjudge" ? "wow" : H.phase === "reveal" && !(H.last && H.last.ok) && !(H.results && H.results.some((r) => r.pts)) ? "sad" : "happy", live);
     $("hRule").textContent = live ? c.rule + (music === "manual" && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn);
-    else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, c.guess ? "¡Todos eligen año!" : H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
-      H.last && !H.last.ok ? `${nameOf(H, H.last.pid)} falló. ${conn}` : `Adivina: ${kindLabel} · ${conn}`);
+    else if (H.phase === "open" && H.opts) setStage("h", "open", `Ronda ${H.round} · ${c.name} · Normal`, H.rebound ? "¡Rebote!" : "¡Opciones en juego!",
+      `${Object.keys(H.picks).length} de ${n} respondieron · Adivina: ${kindLabel}` + (H.last && !H.last.ok ? ` · ${nameOf(H, H.last.pid)} falló` : ""));
+    else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, c.guess ? "¡Todos eligen año!" : H.rebound ? "¡Rebote!" : H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
+      H.last && !H.last.ok ? `${nameOf(H, H.last.pid)} falló: los demás tienen otra chance. ${conn}` : `Adivina: ${kindLabel} · ${conn}`);
     else if (H.phase === "answering") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, `Contesta ${nameOf(H, H.queue[0])}`,
       music === "spotify" ? "Música en pausa. Escucha la respuesta." : "Pausa la música y escucha la respuesta.");
     else if (H.phase === "yearjudge") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, "¿De qué año es?", "Escribe el año correcto abajo.");
@@ -564,6 +734,8 @@
   let joinCode = null;
   let pDeadline = null;
   let pDeck = null;
+  let myPick = { round: -1, i: null };
+  let seenEv = null, seenRound = null;
   setInterval(() => {
     if (role !== "player" || !st) return;
     const left = pDeadline ? pDeadline - Date.now() : (typeof st.left === "number" ? st.left : null);
@@ -598,6 +770,10 @@
         if (fresh(d, retained) && typeof d.st === "object") {
           st = d.st; lastStateAt = Date.now();
           pDeadline = st.running && typeof st.left === "number" ? Date.now() + st.left : null;
+          const live = st.phase === "open" || st.phase === "answering";
+          if (seenRound !== null && st.round !== seenRound && live) roundFx(st);
+          if (seenEv !== null && st.ev !== seenEv) playerFx(st);
+          seenRound = st.round; seenEv = st.ev;
           renderPlayer();
         }
       },
@@ -619,7 +795,7 @@
   // Volver a la pantalla de inicio (código equivocado, cambiar nombre, cerrar la sala).
   function backToStart() {
     if (net) { net.close(); net = null; }
-    role = null; st = null; joinCode = null; lastStateAt = 0; pressedRound = -1;
+    role = null; st = null; joinCode = null; lastStateAt = 0; pressedRound = -1; seenEv = null; seenRound = null;
     ss.set("pm_player", null); ss.set("pm_host", null);
     history.replaceState(null, "", location.pathname + (testParams.length ? "?" + testParams.map((k) => `${k}=${encodeURIComponent(params.get(k))}`).join("&") : ""));
     $("player").hidden = true; $("host").hidden = true; $("start").hidden = false;
@@ -651,6 +827,32 @@
     vibrate(60);
     renderPlayer();
     $("buzz").classList.add("pressed");
+  }
+
+  // Efectos en el móvil del jugador cuando alguien acierta o falla.
+  function playerFx(st) {
+    const e = st.evt; if (!e) return;
+    const kind = mascotKind(st), who = e.pid ? nameOf(st, e.pid) : "";
+    const locked = Array.isArray(st.locked) ? st.locked : [];
+    if (e.type === "win") {
+      if (e.pid === pid) { Fx.win("¡Acertaste!", `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind); vibrate([60, 40, 60, 40, 200]); }
+      else { Fx.lose(`¡Te ganó ${who}!`, `Sumó ${e.pts}`, kind); vibrate(300); }
+    } else if (e.type === "wrong") {
+      if (e.pid === pid) { Fx.lose("¡Fallaste!", e.pts ? `${e.pts} punto${e.pts === -1 ? "" : "s"}` : "", kind); vibrate(400); }
+      else if (st.phase !== "reveal" && !locked.includes(pid)) { Fx.info("¡Rebote!", `${who} falló. ¡Tienes otra chance!`, kind); vibrate([80, 60, 80]); }
+    } else if (e.type === "timeout") { Fx.lose("¡Se acabó el tiempo!", "", kind); vibrate(300); }
+    else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
+    else if (e.type === "year") {
+      const r = Array.isArray(st.results) && st.results.find((x) => x.pid === pid);
+      if (r && r.pts) Fx.win(r.pts === 3 ? "¡Exacto!" : "¡Cerca!", `Era ${st.year} · +${r.pts}`, "anio");
+      else if (r) Fx.lose(`Era ${st.year}`, `Elegiste ${r.year}`, "anio");
+      else Fx.info(`Era ${st.year}`, "", "anio");
+    }
+  }
+  function pick(i) {
+    if (!st || !online() || st.phase !== "open" || myPick.round === st.round) return;
+    if (!send({ t: "pick", round: st.round, i })) return;
+    myPick = { round: st.round, i }; vibrate(60); renderPlayer();
   }
 
   // ---------- Selector de año ----------
@@ -685,7 +887,7 @@
     if (role !== "player") return;
     const btn = $("buzz");
     btn.classList.remove("pressed", "live");
-    if (!st || !online()) { btn.disabled = true; renderScores($("pScores"), { scores: {} }, pid, []); renderReveal($("pReveal"), null); return; }
+    if (!st || !online()) { btn.disabled = true; $("pOpts").hidden = true; renderScores($("pScores"), { scores: {} }, pid, []); renderReveal($("pReveal"), null); return; }
     const kindLabel = (KINDS[st.kind] || KINDS.cancion)[0];
     const queue = Array.isArray(st.queue) ? st.queue : [];
     const locked = Array.isArray(st.locked) ? st.locked : [];
@@ -694,7 +896,13 @@
     const cc = CH[st.ch] || CH.clasico;
     const guessing = !!cc.guess && (st.phase === "open" || st.phase === "yearjudge");
     const sent = sentRound === st.round || (Array.isArray(st.done) && st.done.includes(pid));
-    btn.hidden = guessing;
+    const options = Array.isArray(st.opts) && st.opts.length > 0;
+    btn.hidden = guessing || (options && st.phase !== "lobby");
+    renderOpts($("pOpts"), st, pid, pick);
+    const picked = options && (pid in (st.picks || {}) || myPick.round === st.round);
+    const mood = st.phase === "answering" || st.phase === "yearjudge" ? "wow" : st.phase !== "reveal" ? "happy"
+      : (st.last && st.last.ok && st.last.pid === pid) || (Array.isArray(st.results) && st.results.some((r) => r.pid === pid && r.pts)) ? "happy" : "sad";
+    setMascot($("pMascot"), st.phase === "lobby" ? "cancion" : mascotKind(st), mood, st.phase === "open" || st.phase === "answering");
     $("pYear").hidden = !guessing;
     if (guessing) {
       const can = st.phase === "open" && !sent;
@@ -711,13 +919,17 @@
     else if (st.phase === "open" || st.phase === "answering") {
       const c = CH[st.ch] || CH.clasico;
       const tag = c.guess ? `Ronda ${st.round} · ${c.name}` : `Ronda ${st.round} · ${c.name} · ${kindLabel}`;
-      if (pos === 0) setStage("p", "ans", tag, "¡Te toca! Di tu respuesta", "Contesta en voz alta.");
+      if (options) {
+        if (locked.includes(pid)) setStage("p", "", tag, "Fallaste esta", "Espera a la próxima canción.");
+        else if (picked) setStage("p", "ans", tag, "¡Respuesta enviada!", "Esperando…");
+        else setStage("p", "open", tag, st.rebound ? "¡Rebote! ¿Cuál es?" : "¿Cuál es?", st.last && !st.last.ok ? `${nameOf(st, st.last.pid)} falló. ¡Tienes otra chance!` : "Toca la respuesta correcta antes que nadie.");
+      } else if (pos === 0) setStage("p", "ans", tag, "¡Te toca! Di tu respuesta", "Contesta en voz alta.");
       else if (pos > 0) setStage("p", "ans", tag, `Eres el ${pos + 1}º en la cola`, `Contesta ${nameOf(st, queue[0])}.`);
       else if (locked.includes(pid)) setStage("p", "", tag, "Fallaste esta", "Espera a la próxima canción.");
       else if (pressedRound === st.round) setStage("p", "ans", tag, "¡Pulsado!", "Esperando al anfitrión…");
       else if (st.phase === "answering") setStage("p", "ans", tag, `Contesta ${nameOf(st, queue[0])}`, c.oneTry ? "Muerte súbita: si falla, se acaba la ronda." : "Si falla, puedes pulsar tú.");
       else if (c.guess) setStage("p", "open", tag, sentRound === st.round ? "¡Año fijado!" : "¿De qué año es?", "");
-      else setStage("p", "open", tag, st.playing || !c.snippet ? "¡Pulsa si lo sabes!" : "¡Corte! ¿Lo sabes?", st.last && !st.last.ok ? `${nameOf(st, st.last.pid)} falló.` : "");
+      else setStage("p", "open", tag, st.rebound ? "¡Rebote! ¡Pulsa!" : st.playing || !c.snippet ? "¡Pulsa si lo sabes!" : "¡Corte! ¿Lo sabes?", st.last && !st.last.ok ? `${nameOf(st, st.last.pid)} falló. ¡Tienes otra chance!` : "");
       if (pos === 0 && lastFirst !== pid) vibrate([80, 60, 80]);
     } else if (st.phase === "yearjudge") {
       setStage("p", "ans", `Ronda ${st.round} · Año exacto`, "¡Tiempo!", "Ahora se sabrá el año…");
