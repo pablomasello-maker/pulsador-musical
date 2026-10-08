@@ -608,6 +608,7 @@
     else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : !auto() && cfg().snippet ? "¡Rebote! Vuelve a poner el fragmento" : "¡Rebote! Los demás tienen otra chance", kind);
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
+    else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
     else if (e.type === "final") { const w = winnerOf(H); Fx.win("¡Fin de la partida!", w ? `Ganó ${nameOf(H, w)}` : "", "cancion"); setTimeout(() => Fx.confetti(), 900); }
     else if (e.type === "year") {
       const top = (H.results || [])[0];
@@ -816,13 +817,16 @@
     b.onclick = () => { H.goal = id; publish(); };
     $("goals").appendChild(b);
   }
-  $("rematch").onclick = () => {
+  // Nuevo juego: puntos, rondas y canciones jugadas a cero. Los jugadores siguen en la sala y la configuración queda.
+  function newGame() {
     clearTimeout(endTimer);
+    stopSnippet(); stopMusic(); try { Ytp.stop(); } catch {}
     for (const k of Object.keys(H.scores)) H.scores[k] = 0;
-    Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], last: null, reveal: null, done: [], year: null, results: null, opts: null, picks: {}, answer: null, bomb: false });
-    played.clear(); current = null; endRound();
-    publish();
-  };
+    Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], last: null, reveal: null, done: [], year: null, results: null, opts: null, picks: {}, answer: null, bomb: false, playing: false });
+    played.clear(); current = null; stopped = false; endRound();
+    ev("new"); publish();
+  }
+  $("rematch").onclick = newGame;
   // Año exacto: al acabar el tiempo (o votar todos) se puntúa con el año de Spotify, o lo escribe el anfitrión.
   function finishGuess() {
     endRound();
@@ -855,7 +859,7 @@
   $("penalty").onchange = (e) => { penalty = e.target.checked; saveHost(); };
   $("resetScores").onclick = () => { $("resetConfirm").hidden = false; };
   $("resetNo").onclick = () => { $("resetConfirm").hidden = true; };
-  $("resetYes").onclick = () => { for (const k of Object.keys(H.scores)) H.scores[k] = 0; $("resetConfirm").hidden = true; publish(); };
+  $("resetYes").onclick = () => { $("resetConfirm").hidden = true; newGame(); };
 
   const hDeck = deckView($("hDeck"));
 
@@ -1134,6 +1138,7 @@
       else if (st.phase !== "reveal" && !locked.includes(pid)) { Fx.info("¡Rebote!", `${who} falló. ¡Tienes otra chance!`, kind); vibrate([80, 60, 80]); }
     } else if (e.type === "timeout") { Fx.lose("¡Se acabó el tiempo!", "", kind); vibrate(300); }
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
+    else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
     else if (e.type === "final") { const w = winnerOf(st); if (w === pid) { Fx.win("¡Ganaste la partida!", "¡Sos el campeón!", "cancion"); setTimeout(() => Fx.confetti(), 900); } else Fx.info("¡Fin de la partida!", w ? `Ganó ${nameOf(st, w)}` : "", "cancion"); }
     else if (e.type === "year") {
       const r = Array.isArray(st.results) && st.results.find((x) => x.pid === pid);

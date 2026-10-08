@@ -197,7 +197,7 @@
         <button id="closeGuess" class="ghost">Cerrar y ver resultados</button>
       </div>
       <div class="panel final" id="hFinal" hidden><h2>🏆 Podio</h2><div class="podium"></div><ul class="rest"></ul>
-        <button id="rematch" class="primary go">🔁 Revancha</button></div>
+        <button id="rematch" class="primary go">🔁 Revancha (nuevo juego)</button></div>
       <div class="panel" id="hResults" hidden><h2 id="hResTitle">Resultados</h2><ul class="scores" id="hResList"></ul></div>
 
       <div class="panel">
@@ -206,9 +206,10 @@
         <p class="eyebrow">Fin de la partida</p>
         <div class="chips" id="goals"></div>
         <label class="check" for="penalty"><input id="penalty" type="checkbox"> Restar 1 punto por fallo</label>
-        <button id="resetScores" class="ghost">Poner marcador a cero</button>
+        <button id="resetScores" class="newgame">🆕 Nuevo juego</button>
         <div id="resetConfirm" class="row" hidden>
-          <button id="resetYes" class="bad">Sí, borrar puntos</button>
+          <p class="tip" style="flex-basis:100%">Se borran los puntos, las rondas y las canciones ya jugadas. Los jugadores siguen en la sala.</p>
+          <button id="resetYes" class="bad">Sí, empezar de cero</button>
           <button id="resetNo" class="ghost">Cancelar</button>
         </div>
         <button id="closeRoom" class="ghost">Cerrar sala y volver al inicio</button>

@@ -366,3 +366,4 @@ a.btn.ytm { background: #fff; color: #ff0033; }
 .igo { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 8px 24px #000a; }
 @media (max-height: 760px) { .ivinyl { width: 110px; height: 110px; } .ilabel { width: 42px; height: 42px; font-size: 20px; } .ititle { font-size: clamp(48px, 14vw, 68px); } .icenter { gap: 10px; } .isteps li { padding: 7px 12px; } }
 @media (max-height: 560px) { .ieq, .ifact { display: none; } .ivinyl { width: 80px; height: 80px; } }
+.newgame { background: linear-gradient(135deg, #3d8bff, #ff4fa3); color: #fff; border: 0; font-weight: 800; font-size: 17px; }
