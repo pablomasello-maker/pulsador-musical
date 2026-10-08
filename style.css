@@ -292,3 +292,17 @@ a.btn { display: flex; align-items: center; justify-content: center; min-height:
 a.btn.sp { background: #1ed760; color: #04190b; }
 a.btn.yt { background: #ff2a2a; color: #fff; }
 .cut { text-align: center; font: 800 26px var(--display); color: #14102a; background: var(--amber); border-radius: 14px; padding: 10px; animation: glow 1s ease-in-out infinite; }
+
+/* ---- Podio ---- */
+.final { text-align: center; background: radial-gradient(120% 80% at 50% 0%, rgba(255,182,39,.22), transparent 60%), var(--panel); }
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 8px; min-height: 230px; }
+.pcol { flex: 1 1 0; max-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.pcol .medal { font-size: 34px; animation: bob 1.4s ease-in-out infinite; }
+.pcol .pn { font: 800 15px/1.1 var(--display); overflow-wrap: anywhere; }
+.pcol .pp { font: 700 13px var(--body); color: var(--muted); }
+.pcol .bar { width: 100%; display: grid; place-items: start center; padding-top: 8px; font: 800 30px var(--display); color: rgba(20,16,42,.55); border-radius: 12px 12px 4px 4px; box-shadow: 0 5px 0 rgba(0,0,0,.3); }
+.pcol.p1 .bar { height: 120px; background: linear-gradient(#ffd23f, #ffb627); }
+.pcol.p2 .bar { height: 84px; background: linear-gradient(#eef0ff, #b8bde0); }
+.pcol.p3 .bar { height: 60px; background: linear-gradient(#ffb27a, #d9773b); }
+.pcol.me .pn { color: var(--amber); }
+.final .rest { list-style: none; padding: 0; margin: 0; color: var(--muted); font-weight: 600; }

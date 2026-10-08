@@ -68,6 +68,7 @@
         <button id="ySend" class="primary">Fijar este año</button>
         <p id="yMsg" class="tip"></p>
       </div>
+      <div class="panel final" id="pFinal" hidden><h2>🏆 Podio</h2><div class="podium"></div><ul class="rest"></ul></div>
       <div class="panel" id="pResults" hidden><h2 id="pResTitle">Resultados</h2><ul class="scores" id="pResList"></ul></div>
       <button id="retry" class="ghost" hidden>Volver a conectar</button>
       <button id="leavePlayer" class="ghost">Cambiar de sala o de nombre</button>
@@ -167,11 +168,15 @@
         </div>
         <button id="closeGuess" class="ghost">Cerrar y ver resultados</button>
       </div>
+      <div class="panel final" id="hFinal" hidden><h2>🏆 Podio</h2><div class="podium"></div><ul class="rest"></ul>
+        <button id="rematch" class="primary go">🔁 Revancha</button></div>
       <div class="panel" id="hResults" hidden><h2 id="hResTitle">Resultados</h2><ul class="scores" id="hResList"></ul></div>
 
       <div class="panel">
         <h2>Marcador</h2>
         <ul id="hScores" class="scores"></ul>
+        <p class="eyebrow">Fin de la partida</p>
+        <div class="chips" id="goals"></div>
         <label class="check" for="penalty"><input id="penalty" type="checkbox"> Restar 1 punto por fallo</label>
         <button id="resetScores" class="ghost">Poner marcador a cero</button>
         <div id="resetConfirm" class="row" hidden>
