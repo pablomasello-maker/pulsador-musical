@@ -1,4 +1,4 @@
-# Pulsador Musical
+# Temón
 
 Concurso de adivinar música para jugar en grupo. El móvil anfitrión, conectado a un parlante, pone la música; los demás móviles son pulsadores. El primero que pulsa contesta.
 

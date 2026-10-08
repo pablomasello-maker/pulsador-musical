@@ -1,4 +1,4 @@
-// Pulsador Musical: el anfitrión crea una sala (PeerJS / WebRTC) y los jugadores se conectan directamente a su móvil.
+// Temón: el anfitrión crea una sala y los jugadores se conectan a través de un servidor MQTT público (ver net.js).
 // El móvil anfitrión es el árbitro: decide el orden de los pulsadores por orden de llegada.
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -129,7 +129,7 @@
   function deckView(el) {
     const k = Cassette.mount(el);
     let round = -1, phase = null, tape = 0, flickering = false, last = Date.now();
-    const lobbyLabel = ["Pulsador Musical", "Cara A · Esperando la primera ronda", "#e9e6dc"];
+    const lobbyLabel = ["Temón", "Cara A · Esperando la primera ronda", "#e9e6dc"];
     k.setLabel(...lobbyLabel);
     return (st, leftMs) => {
       const now = Date.now(), dt = (now - last) / 1000; last = now;

@@ -1,6 +1,6 @@
 {
-  "name": "Pulsador Musical",
-  "short_name": "Pulsador",
+  "name": "Temón",
+  "short_name": "Temón",
   "description": "Concurso de adivinar música: un móvil pone la música y los demás son pulsadores.",
   "lang": "es",
   "start_url": "./",
