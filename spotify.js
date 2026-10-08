@@ -16,7 +16,7 @@ window.Spotify = (() => {
 
   // Client ID de la app de Spotify del juego. Con él puesto, el anfitrión solo pulsa "Conectar Spotify".
   // No es secreto: con PKCE cualquier app web lo lleva a la vista.
-  const BUILTIN = "";
+  const BUILTIN = "7c70696d87d445ccbd079a7351f8e134";
   function builtin() { return !!BUILTIN; }
   function clientId() { return BUILTIN || ls.get("sp_cid") || ""; }
   function connected() { return !!(tok && tok.refresh_token); }
