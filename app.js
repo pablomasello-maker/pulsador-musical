@@ -223,7 +223,7 @@
   function renderReveal(el, rv) {
     if (!rv) { el.hidden = true; el.replaceChildren(); return; }
     const parts = [];
-    if (rv.img && /^https:\/\/[a-z0-9.-]+\.scdn\.co\//.test(rv.img)) { const im = document.createElement("img"); im.src = rv.img; im.alt = ""; parts.push(im); }
+    if (rv.img && /^https:\/\/([a-z0-9.-]+\.scdn\.co|i\.ytimg\.com)\//.test(rv.img)) { const im = document.createElement("img"); im.src = rv.img; im.alt = ""; parts.push(im); }
     const t = document.createElement("p"); t.className = "t"; t.textContent = rv.title || ""; parts.push(t);
     const a = document.createElement("p"); a.textContent = rv.artist || ""; parts.push(a);
     const d = document.createElement("p"); d.className = "muted"; d.textContent = [rv.album, rv.year].filter(Boolean).join(" · "); parts.push(d);
@@ -524,7 +524,9 @@
   }, 200);
 
   async function playCurrent() {
-    if (current.vid) await Ytp.play($("ytBox"), current.vid, (current.pos || 0) / 1000, ytFailed);
+    // El video ya cargado se rebobina (cargarlo de nuevo podría repetir la publicidad).
+    if (current.vid && current.loaded) Ytp.seek((current.pos || 0) / 1000);
+    else if (current.vid) { await Ytp.play($("ytBox"), current.vid, (current.pos || 0) / 1000, ytFailed); current.loaded = true; }
     else if (link) { await Spotify.seek(current.pos || 0); await Spotify.resume(); }
     else await Spotify.play(current, current.pos);
     H.playing = true; stopped = false; startSnippet();
@@ -684,17 +686,9 @@
       Ytp.stop();
       current = pickDeckSong(); H.ch = ch; H.playing = false; stopSnippet();
       if (!current) { show($("roundErr"), "Elige al menos un mazo de canciones."); return; }
-      if (ytOn && Ytp.canSearch()) {
-        $("openRound").disabled = true;
-        const vid = await Ytp.find(current);
-        if (vid) {
-          current.vid = vid;
-          // Aguja loca: en cualquier parte del tema. Si no, a los 35 s para saltar la intro del video.
-          current.pos = (c.randomStart ? 20 + Math.random() * 120 : 35) * 1000;
-          try { await playCurrent(); } catch { current.vid = null; Ytp.stop(); }
-        }
-        $("openRound").disabled = false;
-      }
+      $("openRound").disabled = true;
+      await startDeckVideo(c);
+      $("openRound").disabled = false;
     } else { current = null; H.ch = ch; H.playing = true; startSnippet(); }
     const o = H.mode === "normal" && !c.guess && current ? buildOptions(current) : null;
     H.rmode = o ? "normal" : "pro"; H.opts = o ? o.opts : null; answerIdx = o ? o.idx : null;
@@ -706,8 +700,11 @@
     clearClock();
     H.lim = c.limit ? c.limit * 1000 : 0;
     if (c.limit) H.left = H.lim;
-    if (music === "deck" && !(current && current.vid)) { H.phase = "cue"; H.playing = false; stopSnippet(); }
-    else if (c.limit) startClock();
+    if (music === "deck") {
+      // Mazos: la ronda arranca con «Ya suena» o, con YouTube, sola cuando el video empieza (después de la publicidad).
+      H.phase = "cue"; H.playing = false; stopSnippet();
+      autoGoWhenPlaying();
+    } else if (c.limit) startClock();
     publish(); roundFx(H);
     if (H.phase === "cue") $("hCue").scrollIntoView({ behavior: "smooth", block: "center" });
   };
@@ -718,6 +715,7 @@
   function ytFailed() {
     if (!current || !current.vid) return;
     current.vid = null; Ytp.stop();
+    if (H.phase === "cue") { Fx.info("Este video no se puede ver aquí", "Ponlo tú desde Spotify o YouTube", mascotKind(H)); publish(); return; }
     if (H.phase === "open" && !H.queue.length && !Object.keys(H.picks).length) {
       endRound(); H.playing = false; H.left = H.lim || null; H.phase = "cue";
       Fx.info("Este video no se puede ver aquí", "Ponlo tú desde Spotify o YouTube", mascotKind(H));
@@ -751,17 +749,36 @@
     if (role !== "host" || H.phase !== "cue") return;
     setTimeout(() => { if (H.phase === "cue") { Fx.info("¡Arranca!", "Pulsadores activos", mascotKind(H)); $("cueGo").onclick(); } }, 500);
   });
-  $("cueSwap").onclick = () => {
+  $("cueSwap").onclick = async () => {
     if (H.phase !== "cue") return;
     const t = pickDeckSong(); if (!t) return;
-    current = t;
+    Ytp.stop(); current = t;
     const c = cfg();
     const o = H.mode === "normal" && !c.guess ? buildOptions(current) : null;
     H.rmode = o ? "normal" : "pro"; H.opts = o ? o.opts : null; answerIdx = o ? o.idx : null;
     publish();
+    $("cueSwap").disabled = true;
+    await startDeckVideo(c); stopSnippet(); H.playing = false;
+    $("cueSwap").disabled = false;
+    publish(); autoGoWhenPlaying();
   };
+  // Mazos con YouTube: busca el video de la canción y lo empieza a cargar dentro de Temón.
+  async function startDeckVideo(c) {
+    if (!ytOn || !Ytp.canSearch() || !current) return;
+    const vid = await Ytp.find(current);
+    if (!vid) return;
+    current.vid = vid;
+    // Aguja loca: en cualquier parte del tema. Si no, a los 35 s para saltar la intro del video.
+    current.pos = (c.randomStart ? 20 + Math.random() * 120 : 35) * 1000;
+    try { await playCurrent(); } catch { current.vid = null; Ytp.stop(); }
+  }
+  function autoGoWhenPlaying() {
+    if (!current || !current.vid) return;
+    const r = H.round, id = current.id;
+    Ytp.waitPlaying(current.pos / 1000).then((ok) => { if (ok && H.round === r && H.phase === "cue" && current && current.id === id && current.vid) $("cueGo").onclick(); });
+  }
   const revealNow = () => {
-    H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img } : null;
+    H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img || (current.vid ? `https://i.ytimg.com/vi/${current.vid}/hqdefault.jpg` : "") } : null;
     H.answer = H.opts ? answerIdx : null; stopped = false;
     if (current && auto()) { resumeMusic(); H.playing = true; } else H.playing = music !== "manual" && !!current;
     checkEnd();
@@ -842,6 +859,7 @@
     const cue = H.phase === "cue" && current;
     $("hCue").hidden = !cue;
     if (cue) {
+      $("cueLinks").hidden = !!current.vid; $("cueBack").hidden = !!current.vid;
       $("cueTitle").textContent = current.title; $("cueArtist").textContent = current.artist;
       const q = encodeURIComponent(current.title + " " + current.artist);
       $("cueSp").href = "https://open.spotify.com/search/" + q;
@@ -879,6 +897,7 @@
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn + ((GOALS[H.goal] || GOALS.free)[1] ? ` · Partida ${(GOALS[H.goal])[0].toLowerCase()}` : ""));
     else if (H.phase === "final") setStage("h", "rev", "Fin de la partida", winnerOf(H) ? `¡Ganó ${nameOf(H, winnerOf(H))}!` : "¡Empate!", "Toca «Revancha» para jugar otra.");
+    else if (H.phase === "cue" && current && current.vid) setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Cargando el video…", "Si hay publicidad, la ronda arranca cuando termine.");
     else if (H.phase === "cue") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Pon esta canción", "Búscala, dale play y vuelve: arranca sola.");
     else if (H.phase === "open" && H.opts) setStage("h", "open", `Ronda ${H.round} · ${c.name} · Normal`, H.rebound ? "¡Rebote!" : "¡Opciones en juego!",
       `${Object.keys(H.picks).length} de ${n} respondieron · Adivina: ${kindLabel}` + (H.last && !H.last.ok ? ` · ${nameOf(H, H.last.pid)} falló` : ""));

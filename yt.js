@@ -66,10 +66,21 @@ window.Ytp = (() => {
     p.loadVideoById({ videoId: id, startSeconds: Math.max(0, Math.floor(startSec || 0)) });
     p.unMute && p.unMute();
   }
+  // Espera a que suene el video de verdad (después de la publicidad, si hay). true si arrancó.
+  function waitPlaying(startSec, timeoutMs = 90000) {
+    const t0 = Date.now();
+    return new Promise((res) => {
+      const iv = setInterval(() => {
+        let ok = false;
+        try { ok = player && player.getPlayerState() === 1 && player.getCurrentTime() >= (startSec || 0) - 1; } catch {}
+        if (ok || Date.now() - t0 > timeoutMs) { clearInterval(iv); res(ok); }
+      }, 300);
+    });
+  }
   function pause() { try { player && player.pauseVideo(); } catch {} }
   function resume() { try { player && player.playVideo(); } catch {} }
   function seek(sec) { try { player && player.seekTo(Math.max(0, sec), true); player.playVideo(); } catch {} }
   function stop() { try { player && player.stopVideo(); } catch {} }
 
-  return { find, canSearch, play, pause, resume, seek, stop, hasKey: () => !!KEY };
+  return { find, canSearch, play, waitPlaying, pause, resume, seek, stop, hasKey: () => !!KEY };
 })();
