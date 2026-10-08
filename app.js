@@ -496,6 +496,15 @@
   function stopMusic() { if (music === "spotify") Spotify.pause(); else if (current && current.vid) Ytp.pause(); }
   function resumeMusic() { if (music === "spotify") return Spotify.resume(); if (current && current.vid) Ytp.resume(); }
   function stopSnippet() { clearTimeout(snippetTimer); snipEnd = 0; }
+  // La canción suena como mucho 45 s por vez (contando solo el tiempo que suena); "Repetir" vuelve a empezar la cuenta.
+  const MAX_PLAY = 45000;
+  let playedMs = 0;
+  setInterval(() => {
+    if (role !== "host" || !H.playing || !current || !auto()) return;
+    playedMs += 500;
+    if (playedMs < MAX_PLAY) return;
+    stopSnippet(); H.playing = false; stopped = true; stopMusic(); sfx.cut(); publish();
+  }, 500);
   function startSnippet() {
     stopSnippet();
     const sn = cfg().snippet;
@@ -533,7 +542,7 @@
     else if (current.vid) { await Ytp.play($("ytBox"), current.vid, (current.pos || 0) / 1000, ytFailed); current.loaded = true; }
     else if (link) { await Spotify.seek(current.pos || 0); await Spotify.resume(); }
     else await Spotify.play(current, current.pos);
-    H.playing = true; stopped = false; startSnippet();
+    H.playing = true; stopped = false; playedMs = 0; startSnippet();
   }
 
   // ---------- Controles de música del anfitrión (Spotify) ----------
@@ -730,6 +739,9 @@
     // Si hay que adivinar el disco, solo canciones que lo tengan.
     const all = deckPool().filter((t) => FIELD[H.kind] !== "album" || t.album);
     let pool = all.filter((t) => !played.has(t.id) && (!current || t.id !== current.id));
+    // Primero las que tienen video guardado: suenan dentro de Temón con pausa, stop y efectos al instante.
+    const withVideo = ytOn ? pool.filter((t) => Ytp.has(t)) : [];
+    if (withVideo.length) pool = withVideo;
     if (!pool.length) { played.clear(); pool = all.filter((t) => !current || t.id !== current.id); }
     if (!pool.length) pool = all;
     const t = pool[Math.floor(Math.random() * pool.length)];
@@ -868,7 +880,7 @@
       const q = encodeURIComponent(current.title + " " + current.artist);
       $("cueSp").href = "https://music.youtube.com/search?q=" + q;
       $("cueYt").href = "https://www.youtube.com/results?search_query=" + q;
-      $("cueTip").textContent = [c.manual || "", c.snippet ? `Suena ${c.snippet} segundos: te aviso cuándo pausar.` : "", c.guess ? "Todos van a elegir el año." : ""].filter(Boolean).join(" ");
+      $("cueTip").textContent = [c.manual || "", c.snippet ? `Suena ${c.snippet} segundos: te aviso cuándo pausar.` : "", "Apenas suene, volvé a Temón: mientras estás en YouTube no llegan las respuestas.", c.guess ? "Todos van a elegir el año." : ""].filter(Boolean).join(" ");
     }
     $("hJudge").hidden = H.phase !== "answering";
     const guessing = !!c.guess && (H.phase === "open" || H.phase === "yearjudge");

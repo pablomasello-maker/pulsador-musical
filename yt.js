@@ -28,6 +28,8 @@ window.Ytp = (() => {
       return id;
     } catch { return null; }
   }
+  // ¿Ya sabemos qué video es, sin gastar búsquedas?
+  const has = (song) => { const k = songKey(song); return !!((window.VIDEOS && window.VIDEOS[k]) || cache[k]); };
   const canSearch = () => !!KEY || Object.keys(window.VIDEOS || {}).length > 0;
 
   // ---------- Reproductor ----------
@@ -82,5 +84,5 @@ window.Ytp = (() => {
   function seek(sec) { try { player && player.seekTo(Math.max(0, sec), true); player.playVideo(); } catch {} }
   function stop() { try { player && player.stopVideo(); } catch {} }
 
-  return { find, canSearch, play, waitPlaying, pause, resume, seek, stop, hasKey: () => !!KEY };
+  return { find, has, canSearch, play, waitPlaying, pause, resume, seek, stop, hasKey: () => !!KEY };
 })();
