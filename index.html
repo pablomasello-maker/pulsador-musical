@@ -54,6 +54,18 @@
       </div>
       <div id="pReveal" class="reveal" hidden></div>
       <button id="buzz" class="buzzer" disabled>¡YA!</button>
+      <div class="panel yearpick" id="pYear" hidden>
+        <p class="eyebrow">¿De qué año es la canción?</p>
+        <div class="counter" id="yCounter" aria-live="polite"></div>
+        <input id="yRange" type="range" min="1950" max="2026" value="1990" aria-label="Año">
+        <div class="row">
+          <button id="yMinus10" class="ghost">−10</button><button id="yMinus" class="ghost">−1</button>
+          <button id="yPlus" class="ghost">+1</button><button id="yPlus10" class="ghost">+10</button>
+        </div>
+        <button id="ySend" class="primary">Fijar este año</button>
+        <p id="yMsg" class="tip"></p>
+      </div>
+      <div class="panel" id="pResults" hidden><h2 id="pResTitle">Resultados</h2><ul class="scores" id="pResList"></ul></div>
       <button id="retry" class="ghost" hidden>Volver a conectar</button>
       <div class="panel">
         <h2>Marcador</h2>
@@ -109,6 +121,19 @@
         </div>
         <button id="skip" class="ghost">Nadie acierta, siguiente canción</button>
       </div>
+
+      <div class="panel" id="hYear" hidden>
+        <p class="eyebrow">Año exacto</p>
+        <p id="hYearInfo" class="tip"></p>
+        <div id="hYearJudge" hidden>
+          <label for="yearIn">¿De qué año es la canción?
+            <input id="yearIn" type="number" inputmode="numeric" min="1900" max="2030" placeholder="Ej. 1987">
+          </label>
+          <button id="scoreYear" class="primary" style="margin-top:10px">Puntuar</button>
+        </div>
+        <button id="closeGuess" class="ghost">Cerrar y ver resultados</button>
+      </div>
+      <div class="panel" id="hResults" hidden><h2 id="hResTitle">Resultados</h2><ul class="scores" id="hResList"></ul></div>
 
       <div class="panel">
         <h2>Marcador</h2>

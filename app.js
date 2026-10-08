@@ -14,6 +14,7 @@
     doble: { name: "Doble o nada", color: "#b48cff", rule: "Acertar vale el doble. Fallar te resta lo mismo.", mult: 2, wrongMinus: true },
     subita: { name: "Muerte súbita", color: "#ff5a4e", rule: "Un solo intento: si el primero falla, se acaba la ronda.", oneTry: true },
     aguja: { name: "Aguja loca", color: "#3ddc97", rule: "Empieza en cualquier parte de la canción y suenan 8 segundos.", snippet: 8, randomStart: true, manual: "Ponla desde la mitad o donde quieras." },
+    anio: { name: "Año exacto", color: "#ff7ac6", rule: "Todos eligen el año de la canción. Exacto: 3 puntos. A 2 años o menos: 2. A 5 o menos: 1.", limit: 25, guess: true },
     ruleta: { name: "Ruleta de desafíos", color: "#e9e6dc", rule: "Cada ronda toca un desafío al azar. Nadie sabe cuál hasta que entra el cassette.", meta: true },
   };
 
@@ -117,7 +118,14 @@
     el.classList.toggle("low", sec <= 5);
     el.hidden = false;
   }
+  const yearPts = (g, y) => { const d = Math.abs(g - y); return d === 0 ? 3 : d <= 2 ? 2 : d <= 5 ? 1 : 0; };
   function resultText(st, me) {
+    if (st.year && Array.isArray(st.results)) {
+      const r = me && st.results.find((x) => x.pid === me);
+      if (r) return r.pts === 3 ? `¡Exacto! ${st.year} · +3` : r.pts ? `Era ${st.year} · +${r.pts}` : `Era ${st.year}`;
+      const top = st.results[0];
+      return top && top.pts ? `Era ${st.year} · gana ${nameOf(st, top.pid)}` : `Era ${st.year}`;
+    }
     const L = st.last;
     if (L && L.ok) return me && L.pid === me ? `¡Acertaste! +${L.pts || 1}` : `¡${nameOf(st, L.pid)} suma ${L.pts || 1}!`;
     if (st.timeout) return "¡Se acabó el tiempo!";
@@ -135,8 +143,8 @@
       const now = Date.now(), dt = (now - last) / 1000; last = now;
       if (!st) return;
       const c = CH[st.ch] || CH.clasico;
-      const kind = (KINDS[st.kind] || KINDS.cancion)[0];
-      const live = st.phase === "open" || st.phase === "answering";
+      const kind = c.guess ? "el año" : (KINDS[st.kind] || KINDS.cancion)[0];
+      const live = st.phase === "open" || st.phase === "answering" || st.phase === "yearjudge";
       if (st.round !== round) {
         const fresh = round !== -1;
         round = st.round; tape = 0;
@@ -162,6 +170,22 @@
     };
   }
 
+  function renderResults(panel, list, title, st, me) {
+    const res = st.phase === "reveal" && st.year && Array.isArray(st.results) ? st.results : null;
+    panel.hidden = !res;
+    if (!res) return;
+    title.textContent = `Era ${st.year}`;
+    if (!res.length) { const li = document.createElement("li"); li.style.display = "block"; li.textContent = "Nadie eligió año."; list.replaceChildren(li); return; }
+    list.replaceChildren(...res.map((r, i) => {
+      const li = document.createElement("li");
+      if (r.pid === me) li.className = "me";
+      const pos = document.createElement("span"); pos.className = "pos"; pos.textContent = r.year;
+      const nm = document.createElement("span"); nm.className = "name"; nm.textContent = nameOf(st, r.pid) + (r.pid === me ? " (tú)" : "");
+      const pt = document.createElement("span"); pt.className = "pts"; pt.textContent = r.pts ? "+" + r.pts : "0";
+      li.append(pos, nm, pt); return li;
+    }));
+  }
+
   function renderReveal(el, rv) {
     if (!rv) { el.hidden = true; el.replaceChildren(); return; }
     const parts = [];
@@ -175,7 +199,9 @@
   // =====================================================================
   // ANFITRIÓN
   // =====================================================================
+  const guesses = {}; // pid -> año (solo lo sabe el anfitrión hasta el final)
   const H = { phase: "lobby", round: 0, kind: "cancion", pick: "clasico", ch: "clasico", roulette: false, playing: false, lim: 0,
+    done: [], year: null, results: null,
     queue: [], locked: [], bl: {}, scores: {}, names: {}, last: null, reveal: null, timeout: false, online: [] };
   const conns = new Map(); // conn.peer -> { conn, pid }
   let penalty = false;
@@ -265,6 +291,14 @@
     }
     const c = conns.get(conn.peer);
     if (!c) return;
+    if (d.t === "guess" && d.round === H.round && H.phase === "open" && cfg().guess) {
+      const y = Number(d.year);
+      if (!Number.isInteger(y) || y < 1900 || y > 2030 || H.done.includes(c.pid)) return;
+      guesses[c.pid] = y; H.done.push(c.pid);
+      if (H.online.length && H.online.every((id) => H.done.includes(id))) finishGuess(); else publish();
+      return;
+    }
+    if (d.t === "buzz" && cfg().guess) return;
     if (d.t === "buzz" && d.round === H.round && (H.phase === "open" || H.phase === "answering")) {
       if (H.queue.includes(c.pid) || H.locked.includes(c.pid)) return;
       H.queue.push(c.pid);
@@ -328,6 +362,7 @@
 
   setInterval(() => {
     if (role !== "host") return;
+    if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
     if (H.running && H.phase === "open" && Date.now() >= deadline) {
       endRound(); H.phase = "reveal"; H.last = null; H.timeout = true; H.queue = [];
       revealNow(); sfx.wrong(); publish(); return;
@@ -370,6 +405,7 @@
     } else { current = null; H.ch = ch; H.playing = true; startSnippet(); }
     H.roulette = roulette;
     H.round += 1; H.queue = []; H.locked = []; H.bl = {}; H.last = null; H.reveal = null; H.timeout = false; H.phase = "open";
+    H.done = []; H.year = null; H.results = null; for (const k of Object.keys(guesses)) delete guesses[k];
     clearClock();
     H.lim = c.limit ? c.limit * 1000 : 0;
     if (c.limit) { H.left = H.lim; startClock(); }
@@ -379,6 +415,29 @@
     H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img } : null;
     if (current) { Spotify.resume(); H.playing = true; } else H.playing = false;
   };
+  // Año exacto: al acabar el tiempo (o votar todos) se puntúa con el año de Spotify, o lo escribe el anfitrión.
+  function finishGuess() {
+    endRound();
+    const y = current && Number(current.year);
+    if (y) scoreYear(y);
+    else { H.phase = "yearjudge"; sfx.cut(); publish(); }
+  }
+  function scoreYear(y) {
+    H.year = y;
+    H.results = Object.entries(guesses).map(([pid, g]) => ({ pid, year: g, pts: yearPts(g, y) }))
+      .sort((a, b) => b.pts - a.pts || Math.abs(a.year - y) - Math.abs(b.year - y));
+    for (const r of H.results) H.scores[r.pid] = (H.scores[r.pid] || 0) + r.pts;
+    H.phase = "reveal"; H.last = null; H.queue = [];
+    revealNow(); sfx.right(); publish();
+  }
+  $("closeGuess").onclick = () => { if (H.phase === "open" && cfg().guess) finishGuess(); };
+  $("scoreYear").onclick = () => {
+    const y = Number($("yearIn").value);
+    if (!Number.isInteger(y) || y < 1900 || y > 2030) { $("yearIn").focus(); return; }
+    $("yearIn").value = "";
+    scoreYear(y);
+  };
+
   $("right").onclick = () => {
     const id = H.queue[0]; if (!id) return;
     const c = cfg(), base = KINDS[H.kind][1];
@@ -421,6 +480,13 @@
     for (const b of kindsEl.children) b.setAttribute("aria-pressed", String(b.dataset.kind === H.kind));
     for (const b of $("chCards").children) b.setAttribute("aria-pressed", String(b.dataset.ch === H.pick));
     $("hJudge").hidden = H.phase !== "answering";
+    const guessing = !!c.guess && (H.phase === "open" || H.phase === "yearjudge");
+    $("hYear").hidden = !guessing;
+    $("hYearJudge").hidden = H.phase !== "yearjudge";
+    $("closeGuess").hidden = H.phase !== "open";
+    $("hYearInfo").textContent = H.phase === "yearjudge" ? "Se acabó el tiempo. Escribe el año correcto para repartir los puntos."
+      : `${H.done.length} de ${n} ya eligieron año.` + (music === "manual" ? " Al cerrar, te pediré el año correcto." : "");
+    renderResults($("hResults"), $("hResList"), $("hResTitle"), H, null);
     $("openRound").textContent = H.round === 0 ? "Abrir primera ronda" : (H.phase === "open" || H.phase === "answering") ? "Otra canción" : "Abrir siguiente ronda";
     $("manualTip").hidden = music === "spotify"; $("spTip").hidden = music !== "spotify";
     $("replay").hidden = !(music === "spotify" && current && (H.phase === "open" || H.phase === "answering"));
@@ -429,10 +495,11 @@
     $("hRule").textContent = live ? c.rule + (music === "manual" && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn);
-    else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
+    else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, c.guess ? "¡Todos eligen año!" : H.playing || !c.snippet ? "¡Pulsadores activos!" : "¡Corte! ¿Quién lo sabe?",
       H.last && !H.last.ok ? `${nameOf(H, H.last.pid)} falló. ${conn}` : `Adivina: ${kindLabel} · ${conn}`);
     else if (H.phase === "answering") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, `Contesta ${nameOf(H, H.queue[0])}`,
       music === "spotify" ? "Música en pausa. Escucha la respuesta." : "Pausa la música y escucha la respuesta.");
+    else if (H.phase === "yearjudge") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, "¿De qué año es?", "Escribe el año correcto abajo.");
     else if (H.phase === "reveal") setStage("h", "rev", `Ronda ${H.round} · ${c.name}`, resultText(H, null), music === "spotify" ? "Abre la siguiente ronda cuando quieras." : "Pon la siguiente canción y abre otra ronda.");
     // El anfitrión ve la canción mientras suena, por si tiene que juzgar.
     renderReveal($("hReveal"), H.reveal || (current && (H.phase === "open" || H.phase === "answering") ? { title: current.title, artist: current.artist, album: current.album, year: current.year } : null));
@@ -565,6 +632,34 @@
     $("buzz").classList.add("pressed");
   }
 
+  // ---------- Selector de año ----------
+  const MAXY = new Date().getFullYear();
+  let pickYear = 1990, sentRound = -1;
+  $("yRange").max = MAXY;
+  function setYear(y, bump) {
+    const old = String(pickYear);
+    pickYear = Math.min(MAXY, Math.max(1950, y));
+    $("yRange").value = pickYear;
+    const digits = String(pickYear).split("");
+    const box = $("yCounter");
+    if (box.children.length !== 4) box.replaceChildren(...digits.map(() => Object.assign(document.createElement("span"), { className: "dig" })));
+    digits.forEach((d, i) => {
+      const el = box.children[i];
+      if (el.textContent !== d) { el.textContent = d; if (bump && old[i] !== d) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); } }
+    });
+  }
+  setYear(pickYear, false);
+  $("yRange").addEventListener("input", (e) => setYear(Number(e.target.value), true));
+  $("yMinus").onclick = () => setYear(pickYear - 1, true);
+  $("yPlus").onclick = () => setYear(pickYear + 1, true);
+  $("yMinus10").onclick = () => setYear(pickYear - 10, true);
+  $("yPlus10").onclick = () => setYear(pickYear + 10, true);
+  $("ySend").onclick = () => {
+    if (!st || !conn || !conn.open || st.phase !== "open") return;
+    try { conn.send({ t: "guess", round: st.round, year: pickYear }); } catch { return; }
+    sentRound = st.round; vibrate(60); renderPlayer();
+  };
+
   function renderPlayer() {
     if (role !== "player") return;
     const btn = $("buzz");
@@ -575,20 +670,36 @@
     const locked = Array.isArray(st.locked) ? st.locked : [];
     const pos = queue.indexOf(pid);
     const canBuzz = (st.phase === "open" || st.phase === "answering") && pos < 0 && !locked.includes(pid) && pressedRound !== st.round;
-    btn.disabled = !canBuzz;
-    if (canBuzz) btn.classList.add("live");
+    const cc = CH[st.ch] || CH.clasico;
+    const guessing = !!cc.guess && (st.phase === "open" || st.phase === "yearjudge");
+    const sent = sentRound === st.round || (Array.isArray(st.done) && st.done.includes(pid));
+    btn.hidden = guessing;
+    $("pYear").hidden = !guessing;
+    if (guessing) {
+      const can = st.phase === "open" && !sent;
+      for (const id of ["yRange", "yMinus", "yPlus", "yMinus10", "yPlus10", "ySend"]) $(id).disabled = !can;
+      $("ySend").textContent = sent ? `Elegiste ${pickYear}` : "Fijar este año";
+      const n = Array.isArray(st.done) ? st.done.length : 0;
+      $("yMsg").textContent = st.phase === "yearjudge" ? "Se acabó el tiempo. El anfitrión está poniendo el año correcto…" : sent ? `Esperando al resto (${n} de ${(st.online || []).length})…` : "Mueve la barra o usa los botones y fija tu año antes de que acabe el tiempo.";
+    }
+    renderResults($("pResults"), $("pResList"), $("pResTitle"), st, pid);
+    btn.disabled = !canBuzz || guessing;
+    if (canBuzz && !guessing) btn.classList.add("live");
 
     if (st.phase === "lobby") setStage("p", "", `Sala ${joinCode}`, `Hola, ${myName}`, "El anfitrión abrirá la primera ronda enseguida.");
     else if (st.phase === "open" || st.phase === "answering") {
       const c = CH[st.ch] || CH.clasico;
-      const tag = `Ronda ${st.round} · ${c.name} · ${kindLabel}`;
+      const tag = c.guess ? `Ronda ${st.round} · ${c.name}` : `Ronda ${st.round} · ${c.name} · ${kindLabel}`;
       if (pos === 0) setStage("p", "ans", tag, "¡Te toca! Di tu respuesta", "Contesta en voz alta.");
       else if (pos > 0) setStage("p", "ans", tag, `Eres el ${pos + 1}º en la cola`, `Contesta ${nameOf(st, queue[0])}.`);
       else if (locked.includes(pid)) setStage("p", "", tag, "Fallaste esta", "Espera a la próxima canción.");
       else if (pressedRound === st.round) setStage("p", "ans", tag, "¡Pulsado!", "Esperando al anfitrión…");
       else if (st.phase === "answering") setStage("p", "ans", tag, `Contesta ${nameOf(st, queue[0])}`, c.oneTry ? "Muerte súbita: si falla, se acaba la ronda." : "Si falla, puedes pulsar tú.");
+      else if (c.guess) setStage("p", "open", tag, sentRound === st.round ? "¡Año fijado!" : "¿De qué año es?", "");
       else setStage("p", "open", tag, st.playing || !c.snippet ? "¡Pulsa si lo sabes!" : "¡Corte! ¿Lo sabes?", st.last && !st.last.ok ? `${nameOf(st, st.last.pid)} falló.` : "");
       if (pos === 0 && lastFirst !== pid) vibrate([80, 60, 80]);
+    } else if (st.phase === "yearjudge") {
+      setStage("p", "ans", `Ronda ${st.round} · Año exacto`, "¡Tiempo!", "Ahora se sabrá el año…");
     } else if (st.phase === "reveal") {
       setStage("p", "rev", `Ronda ${st.round} · ${(CH[st.ch] || CH.clasico).name}`, resultText(st, pid), "Atento a la siguiente canción.");
     }
