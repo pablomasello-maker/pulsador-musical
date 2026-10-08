@@ -56,6 +56,7 @@
     right: () => tone([[660, 0.12, "triangle", .25], [880, 0.12, "triangle", .25], [1320, 0.3, "triangle", .25]]),
     wrong: () => tone([[180, 0.25, "square", .2], [120, 0.45, "square", .2]]),
     open: () => tone([[523, 0.08, "sine", .2], [784, 0.14, "sine", .2]]),
+    cut: () => tone([[880, 0.1, "square", .2], [0.01, 0.06, "sine", 0.0001], [880, 0.1, "square", .2]]),
   };
   const vibrate = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
   async function keepAwake() { try { await navigator.wakeLock?.request("screen"); } catch {} }
@@ -99,6 +100,13 @@
       li.append(pos, nm, pt); return li;
     }));
   }
+  function renderTimer(el, ms, phase) {
+    if (ms == null || !(phase === "open" || phase === "answering")) { el.hidden = true; return; }
+    const sec = Math.max(0, Math.ceil(ms / 1000));
+    el.textContent = `${sec} s`;
+    el.classList.toggle("low", sec <= 5);
+    el.hidden = false;
+  }
   function renderReveal(el, rv) {
     if (!rv) { el.hidden = true; el.replaceChildren(); return; }
     const parts = [];
@@ -112,6 +120,7 @@
   // =====================================================================
   // ANFITRIÓN
   // =====================================================================
+  const C = { snippet: 0, limit: 0, cut: true }; // desafíos elegidos por el anfitrión
   const H = { phase: "lobby", round: 0, kind: "cancion", queue: [], locked: [], scores: {}, names: {}, last: null, reveal: null, online: [] };
   const conns = new Map(); // conn.peer -> { conn, pid }
   let penalty = false;
@@ -123,7 +132,7 @@
 
   const randomCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 
-  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, penalty, music, playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
+  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, C, penalty, music, playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
   function startHost(saved) {
     role = "host";
@@ -132,7 +141,9 @@
       Object.assign(H, saved.H || {});
       penalty = !!saved.penalty; $("penalty").checked = penalty;
       played = new Set(saved.played || []);
+      if (saved.C) Object.assign(C, saved.C);
       if (H.phase === "open" || H.phase === "answering") { H.phase = "reveal"; H.queue = []; H.reveal = null; }
+      H.left = null; H.running = false;
     }
     code = (saved && saved.code) || randomCode();
     $("redirectUri").textContent = Spotify.redirectUri();
@@ -202,7 +213,8 @@
       H.queue.push(c.pid);
       if (H.queue.length === 1) {
         H.phase = "answering"; sfx.buzz(); vibrate(200);
-        if (music === "spotify") Spotify.pause();
+        freezeClock();
+        if (C.cut) { if (C.snippet) { clearTimeout(snippetTimer); snippetOver = true; } stopMusic(); }
       }
       publish();
     }
@@ -211,7 +223,7 @@
   function publish() {
     if (role !== "host") return;
     H.online = [...new Set([...conns.values()].map((c) => c.pid))];
-    const msg = { t: "state", st: H };
+    const msg = { t: "state", st: { ...H, left: H.running ? Math.max(0, deadline - Date.now()) : H.left } };
     for (const { conn } of conns.values()) { try { if (conn.open) conn.send(msg); } catch {} }
     saveHost();
     renderHost();
@@ -226,6 +238,51 @@
     kindsEl.appendChild(b);
   }
 
+  // ---------- Desafíos ----------
+  const SNIPPETS = [[0, "Entera"], [3, "3 s"], [5, "5 s"], [10, "10 s"], [20, "20 s"]];
+  const LIMITS = [[0, "Sin límite"], [10, "10 s"], [20, "20 s"], [30, "30 s"]];
+  let snippetTimer = null;
+  let snippetOver = false;
+  let deadline = null; // reloj del anfitrión mientras corre la cuenta atrás; a los jugadores se les manda lo que queda
+
+  function chipRow(el, options, key) {
+    for (const [v, label] of options) {
+      const b = document.createElement("button");
+      b.className = "chip"; b.type = "button"; b.dataset.v = v; b.textContent = label;
+      b.onclick = () => { C[key] = v; saveHost(); renderHost(); };
+      el.appendChild(b);
+    }
+  }
+  chipRow($("snippetChips"), SNIPPETS, "snippet");
+  chipRow($("limitChips"), LIMITS, "limit");
+  $("cutOnBuzz").onchange = (e) => { C.cut = e.target.checked; saveHost(); };
+
+  function stopMusic() { if (music === "spotify") Spotify.pause(); }
+  function startSnippet() {
+    clearTimeout(snippetTimer); snippetOver = false;
+    if (!C.snippet) return;
+    snippetTimer = setTimeout(() => { snippetOver = true; stopMusic(); sfx.cut(); renderHost(); }, C.snippet * 1000);
+  }
+  function startClock() { if (H.left != null && !H.running) { deadline = Date.now() + H.left; H.running = true; } }
+  function freezeClock() { if (H.running) { H.left = Math.max(0, deadline - Date.now()); H.running = false; deadline = null; } }
+  function clearClock() { H.left = null; H.running = false; deadline = null; }
+  function endRound() { clearClock(); clearTimeout(snippetTimer); }
+
+  setInterval(() => {
+    if (role !== "host") return;
+    if (H.running && H.phase === "open" && Date.now() >= deadline) {
+      endRound(); H.phase = "reveal"; H.last = null; H.timeout = true; H.queue = [];
+      revealNow(); sfx.wrong(); publish(); return;
+    }
+    renderTimer($("hTimer"), H.running ? deadline - Date.now() : H.left, H.phase);
+  }, 200);
+
+  $("replay").onclick = async () => {
+    if (!current || music !== "spotify") return;
+    show($("roundErr"), "");
+    try { await Spotify.play(current); startSnippet(); } catch (e) { show($("roundErr"), e.message); }
+  };
+
   $("openRound").onclick = async () => {
     show($("roundErr"), "");
     if (music === "spotify") {
@@ -239,7 +296,10 @@
       $("openRound").disabled = false;
       played.add(t.uri); current = t;
     } else current = null;
-    H.round += 1; H.queue = []; H.locked = []; H.last = null; H.reveal = null; H.phase = "open";
+    H.round += 1; H.queue = []; H.locked = []; H.last = null; H.reveal = null; H.timeout = false; H.phase = "open";
+    clearClock();
+    if (C.limit) { H.left = C.limit * 1000; startClock(); }
+    startSnippet();
     sfx.open(); publish();
   };
   const revealNow = () => { H.reveal = current ? { title: current.title, artist: current.artist, album: current.album, year: current.year, img: current.img } : null; if (current) Spotify.resume(); };
@@ -247,7 +307,7 @@
     const id = H.queue[0]; if (!id) return;
     H.scores[id] = (H.scores[id] || 0) + KINDS[H.kind][1];
     H.last = { pid: id, ok: true }; H.phase = "reveal"; H.queue = [];
-    revealNow(); sfx.right(); publish();
+    endRound(); revealNow(); sfx.right(); publish();
   };
   $("wrong").onclick = () => {
     const id = H.queue.shift(); if (!id) return;
@@ -255,10 +315,14 @@
     if (penalty) H.scores[id] = (H.scores[id] || 0) - 1;
     H.last = { pid: id, ok: false };
     H.phase = H.queue.length ? "answering" : "open";
-    if (!H.queue.length && music === "spotify") Spotify.resume();
+    if (!H.queue.length) {
+      startClock();
+      // Sigue la canción, salvo en modo fragmento: ese ya se escuchó (se puede repetir con el botón).
+      if (music === "spotify" && C.cut && !C.snippet) Spotify.resume();
+    }
     sfx.wrong(); publish();
   };
-  $("skip").onclick = () => { H.phase = "reveal"; H.last = null; H.queue = []; revealNow(); publish(); };
+  $("skip").onclick = () => { H.phase = "reveal"; H.last = null; H.queue = []; endRound(); revealNow(); publish(); };
   $("penalty").onchange = (e) => { penalty = e.target.checked; saveHost(); };
   $("resetScores").onclick = () => { $("resetConfirm").hidden = false; };
   $("resetNo").onclick = () => { $("resetConfirm").hidden = true; };
@@ -272,6 +336,11 @@
     $("hJudge").hidden = H.phase !== "answering";
     $("openRound").textContent = H.round === 0 ? "Abrir primera ronda" : (H.phase === "open" || H.phase === "answering") ? "Otra canción" : "Abrir siguiente ronda";
     $("manualTip").hidden = music === "spotify"; $("spTip").hidden = music !== "spotify";
+    for (const b of $("snippetChips").children) b.setAttribute("aria-pressed", String(Number(b.dataset.v) === C.snippet));
+    for (const b of $("limitChips").children) b.setAttribute("aria-pressed", String(Number(b.dataset.v) === C.limit));
+    $("cutOnBuzz").checked = C.cut;
+    $("replay").hidden = !(music === "spotify" && current && (H.phase === "open" || H.phase === "answering"));
+    $("replay").textContent = C.snippet ? `Repetir fragmento (${C.snippet} s)` : "Repetir desde el inicio";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
     if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn);
     else if (H.phase === "open") setStage("h", "open", `Ronda ${H.round} · ${kindLabel}`, "¡Pulsadores activos!",
@@ -279,7 +348,7 @@
     else if (H.phase === "answering") setStage("h", "ans", `Ronda ${H.round} · ${kindLabel}`, `Contesta ${nameOf(H, H.queue[0])}`,
       music === "spotify" ? "Música en pausa. Escucha la respuesta." : "Pausa la música y escucha la respuesta.");
     else if (H.phase === "reveal") setStage("h", "rev", `Ronda ${H.round} · ${kindLabel}`,
-      H.last && H.last.ok ? `¡Punto para ${nameOf(H, H.last.pid)}!` : "Nadie acertó", music === "spotify" ? "Abre la siguiente ronda cuando quieras." : "Pon la siguiente canción y abre otra ronda.");
+      H.last && H.last.ok ? `¡Punto para ${nameOf(H, H.last.pid)}!` : H.timeout ? "¡Se acabó el tiempo!" : "Nadie acertó", music === "spotify" ? "Abre la siguiente ronda cuando quieras." : "Pon la siguiente canción y abre otra ronda.");
     // El anfitrión ve la canción mientras suena, por si tiene que juzgar.
     renderReveal($("hReveal"), H.reveal || (current && (H.phase === "open" || H.phase === "answering") ? { title: current.title, artist: current.artist, album: current.album, year: current.year } : null));
     $("hQueue").replaceChildren(...H.queue.map((id, i) => {
@@ -344,6 +413,8 @@
   let retries = 0;
   let joinCode = null;
   let connectTimer = null;
+  let pDeadline = null;
+  setInterval(() => { if (role === "player" && st) renderTimer($("pTimer"), pDeadline ? pDeadline - Date.now() : (typeof st.left === "number" ? st.left : null), st.phase); }, 200);
 
   function startPlayer(c) {
     role = "player"; joinCode = c;
@@ -365,7 +436,11 @@
       conn.on("data", (d) => {
         if (!d || typeof d !== "object") return;
         if (d.t === "full") { failed("La sala está llena."); return; }
-        if (d.t === "state" && d.st && typeof d.st === "object") { st = d.st; renderPlayer(); }
+        if (d.t === "state" && d.st && typeof d.st === "object") {
+          st = d.st;
+          pDeadline = st.running && typeof st.left === "number" ? Date.now() + st.left : null;
+          renderPlayer();
+        }
       });
       conn.on("close", () => lost());
       conn.on("error", () => lost());
@@ -423,7 +498,7 @@
       if (pos === 0 && lastFirst !== pid) vibrate([80, 60, 80]);
     } else if (st.phase === "reveal") {
       const won = st.last && st.last.ok;
-      setStage("p", "rev", `Ronda ${st.round} · ${kindLabel}`, won ? (st.last.pid === pid ? "¡Acertaste!" : `Punto para ${nameOf(st, st.last.pid)}`) : "Nadie acertó", "Atento a la siguiente canción.");
+      setStage("p", "rev", `Ronda ${st.round} · ${kindLabel}`, won ? (st.last.pid === pid ? "¡Acertaste!" : `Punto para ${nameOf(st, st.last.pid)}`) : st.timeout ? "¡Se acabó el tiempo!" : "Nadie acertó", "Atento a la siguiente canción.");
     }
     renderReveal($("pReveal"), st.phase === "reveal" ? st.reveal : null);
     lastFirst = queue[0] || null;
