@@ -155,6 +155,8 @@
       <details class="panel" id="spPanel">
         <summary>Música automática con Spotify (opcional)</summary>
         <div id="spOff">
+          <p id="spEasy" class="tip" hidden>Inicia sesión con tu cuenta de Spotify Premium y elige una playlist tuya. La música sonará en la app de Spotify de este móvil.</p>
+          <div id="spSetup">
           <ol class="steps">
             <li>Necesitas <strong>Spotify Premium</strong>.</li>
             <li>Entra en <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> y crea una app (“Create app”).</li>
@@ -164,6 +166,7 @@
           <label for="spClient" style="margin-top:12px">Client ID
             <input id="spClient" type="text" autocomplete="off" spellcheck="false" placeholder="32 letras y números">
           </label>
+          </div>
           <button id="spConnect" class="primary" style="margin-top:10px">Conectar Spotify</button>
         </div>
         <div id="spOn" hidden>

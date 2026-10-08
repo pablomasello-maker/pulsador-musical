@@ -14,13 +14,17 @@ window.Spotify = (() => {
   try { tok = JSON.parse(ls.get("sp_tok") || "null"); } catch {}
   const save = (t) => { tok = t; ls.set("sp_tok", t ? JSON.stringify(t) : null); };
 
-  function clientId() { return ls.get("sp_cid") || ""; }
+  // Client ID de la app de Spotify del juego. Con él puesto, el anfitrión solo pulsa "Conectar Spotify".
+  // No es secreto: con PKCE cualquier app web lo lleva a la vista.
+  const BUILTIN = "";
+  function builtin() { return !!BUILTIN; }
+  function clientId() { return BUILTIN || ls.get("sp_cid") || ""; }
   function connected() { return !!(tok && tok.refresh_token); }
 
   async function login(cid) {
-    cid = String(cid || "").trim();
+    cid = String(cid || BUILTIN || "").trim();
     if (!/^[A-Za-z0-9]{20,64}$/.test(cid)) throw new Error("El Client ID no parece correcto. Cópialo tal cual de tu app de Spotify.");
-    ls.set("sp_cid", cid);
+    if (!BUILTIN) ls.set("sp_cid", cid);
     const verifier = randomString(64);
     const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
     const state = randomString(16);
@@ -121,5 +125,5 @@ window.Spotify = (() => {
   async function resume() { try { await api("/me/player/play", { method: "PUT" }); } catch {} }
   function logout() { save(null); }
 
-  return { redirectUri, clientId, connected, login, handleRedirect, me, playlists, playlistTracks, play, pause, resume, logout };
+  return { builtin, redirectUri, clientId, connected, login, handleRedirect, me, playlists, playlistTracks, play, pause, resume, logout };
 })();

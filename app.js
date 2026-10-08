@@ -513,6 +513,7 @@
   // ---------- Spotify (solo anfitrión) ----------
   async function initSpotifyPanel(saved) {
     $("spClient").value = Spotify.clientId();
+    $("spSetup").hidden = Spotify.builtin(); $("spEasy").hidden = !Spotify.builtin();
     $("spConnect").onclick = async () => {
       show($("spErr"), "");
       saveHost();
