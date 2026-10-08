@@ -1,6 +1,6 @@
 // ---------- Riff rockero de la intro ----------
 // Tema original de Temón, tocado en vivo con Web Audio: guitarra distorsionada en quintas, bajo y batería.
-window.IntroRiff = (() => {
+const SynthRiff = (() => {
   let ac = null, master = null, dist = null, noise = null, timer = null, playing = false, startedAt = 0, step = 0;
   const BPM = 140, E8 = 60 / BPM / 2; // duración de una corchea
   const E2 = 82.41, hz = (st, base = E2) => base * Math.pow(2, st / 12);
@@ -102,10 +102,60 @@ window.IntroRiff = (() => {
   return { setup, start, finish, stop, running, isPlaying, resume: () => ac && ac.resume() };
 })();
 
+// Grabación del tema (audio/intro-loop.mp3 y audio/intro-end.mp3, hechos para Temón). Si no carga, se toca el riff sintetizado.
+window.IntroRiff = (() => {
+  const LOOP_START = 0.5, LOOP_LEN = 8 * 4 * 60 / 140; // 8 compases a 140 bpm
+  let ac = null, out = null, bufs = null, loading = null, src = null, want = false, useSynth = false;
+  function setup() {
+    if (useSynth) return SynthRiff.setup();
+    if (ac) return true;
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { useSynth = true; return SynthRiff.setup(); }
+    out = ac.createGain(); out.gain.value = 0.8; out.connect(ac.destination);
+    const get = (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u); return r.arrayBuffer(); }).then((b) => new Promise((res, rej) => ac.decodeAudioData(b, res, rej)));
+    loading = Promise.all([get("audio/intro-loop.mp3"), get("audio/intro-end.mp3")])
+      .then(([loop, end]) => { bufs = { loop, end }; if (want) playLoop(); })
+      .catch(() => { useSynth = true; if (want) SynthRiff.start(); });
+    return true;
+  }
+  function playLoop() {
+    if (src || !bufs) return;
+    out.gain.cancelScheduledValues(0); out.gain.value = 0.8;
+    src = ac.createBufferSource(); src.buffer = bufs.loop; src.loop = true;
+    src.loopStart = LOOP_START; src.loopEnd = LOOP_START + LOOP_LEN;
+    src.connect(out); src.start(ac.currentTime + 0.02, LOOP_START);
+  }
+  function start() {
+    if (useSynth) return SynthRiff.start();
+    if (!setup() || useSynth) return SynthRiff.start();
+    ac.resume(); want = true; playLoop();
+  }
+  function finish() {
+    if (useSynth) return SynthRiff.finish();
+    if (!setup()) return;
+    ac.resume(); want = false;
+    const t = ac.currentTime + 0.02;
+    if (src) { const old = src, g = ac.createGain(); old.disconnect(); old.connect(g).connect(out); g.gain.setValueAtTime(1, t); g.gain.linearRampToValueAtTime(0, t + 0.08); old.stop(t + 0.1); src = null; }
+    const hit = () => { const e = ac.createBufferSource(); e.buffer = bufs.end; e.connect(out); e.start(ac.currentTime + 0.01); };
+    if (bufs) hit(); else if (loading) loading.then(() => bufs && hit());
+  }
+  function stop() {
+    want = false;
+    if (useSynth) return SynthRiff.stop();
+    if (src) { try { src.stop(); } catch {} src = null; }
+  }
+  return {
+    setup, start, finish, stop,
+    running: () => (useSynth ? SynthRiff.running() : !!ac && ac.state === "running"),
+    isPlaying: () => (useSynth ? SynthRiff.isPlaying() : want),
+    resume: () => (useSynth ? SynthRiff.resume() : ac && ac.resume()),
+  };
+})();
+
 // Presentación al abrir Temón: vinilo, letras que saltan, notas flotando y un dato curioso de música.
 (() => {
   const el = document.getElementById("intro");
   if (!el) return;
+  document.documentElement.classList.add("introOpen");
   const FACTS = [
     "«Bohemian Rhapsody» de Queen dura casi 6 minutos y no tiene estribillo.",
     "Los Beatles grabaron su primer disco, «Please Please Me», en un solo día de 1963.",
@@ -155,6 +205,7 @@ window.IntroRiff = (() => {
     try { localStorage.setItem("pm_intro", "1"); } catch {}
     if (soundOn) IntroRiff.finish(); else IntroRiff.stop();
     el.classList.add("out");
+    document.documentElement.classList.remove("introOpen");
     setTimeout(() => el.remove(), 550);
   }
   document.getElementById("introGo").addEventListener("click", (e) => { e.stopPropagation(); close(); });
