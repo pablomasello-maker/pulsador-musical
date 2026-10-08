@@ -67,6 +67,7 @@
       </div>
       <div class="panel" id="pResults" hidden><h2 id="pResTitle">Resultados</h2><ul class="scores" id="pResList"></ul></div>
       <button id="retry" class="ghost" hidden>Volver a conectar</button>
+      <button id="leavePlayer" class="ghost">Cambiar de sala o de nombre</button>
       <div class="panel">
         <h2>Marcador</h2>
         <ul id="pScores" class="scores"></ul>
@@ -143,6 +144,11 @@
         <div id="resetConfirm" class="row" hidden>
           <button id="resetYes" class="bad">Sí, borrar puntos</button>
           <button id="resetNo" class="ghost">Cancelar</button>
+        </div>
+        <button id="closeRoom" class="ghost">Cerrar sala y volver al inicio</button>
+        <div id="closeConfirm" class="row" hidden>
+          <button id="closeYes" class="bad">Sí, cerrar la sala</button>
+          <button id="closeNo" class="ghost">Cancelar</button>
         </div>
       </div>
 

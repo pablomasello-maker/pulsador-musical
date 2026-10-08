@@ -593,6 +593,7 @@
       onMessage: (topic, d, retained) => {
         if (topic !== joinCode + "/down") return;
         if (d.t === "full" && d.to === net.cid) { failed("La sala está llena."); net.close(); return; }
+        if (d.t === "closed") { st = null; failed("El anfitrión cerró la sala."); return; }
         if (fresh(d, retained) && typeof d.st === "object") {
           st = d.st; lastStateAt = Date.now();
           pDeadline = st.running && typeof st.left === "number" ? Date.now() + st.left : null;
@@ -613,6 +614,32 @@
     $("buzz").disabled = true; $("retry").hidden = false;
   }
   $("retry").onclick = () => connectPlayer();
+
+  // Volver a la pantalla de inicio (código equivocado, cambiar nombre, cerrar la sala).
+  function backToStart() {
+    if (net) { net.close(); net = null; }
+    role = null; st = null; joinCode = null; lastStateAt = 0; pressedRound = -1;
+    ss.set("pm_player", null); ss.set("pm_host", null);
+    history.replaceState(null, "", location.pathname + (testParams.length ? "?" + testParams.map((k) => `${k}=${encodeURIComponent(params.get(k))}`).join("&") : ""));
+    $("player").hidden = true; $("host").hidden = true; $("start").hidden = false;
+    $("code").value = ""; $("name").value = ls.get("pm_name") || "";
+    show($("startErr"), "");
+    $("code").focus();
+  }
+  $("leavePlayer").onclick = backToStart;
+  $("closeRoom").onclick = () => { $("closeConfirm").hidden = false; };
+  $("closeNo").onclick = () => { $("closeConfirm").hidden = true; };
+  $("closeYes").onclick = () => {
+    $("closeConfirm").hidden = true;
+    // Deja un aviso para que los jugadores sepan que la sala ya no existe.
+    if (net) net.pub(code + "/down", { t: "closed" }, true);
+    if (Spotify.connected()) Spotify.pause();
+    endRound();
+    for (const k of Object.keys(H.scores)) delete H.scores[k];
+    Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], names: {}, last: null, reveal: null, done: [], year: null, results: null, online: [] });
+    conns.clear(); current = null;
+    setTimeout(backToStart, 300);
+  };
 
   $("buzz").addEventListener("pointerdown", (e) => { e.preventDefault(); press(); });
   $("buzz").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(); } });
