@@ -358,3 +358,4 @@ a.btn.ytm { background: #fff; color: #ff0033; }
 .isteps span { font-size: 17px; }
 .igo { font-size: 26px; text-transform: uppercase; }
 .intro, .intro * { box-sizing: border-box; }
+.isnd { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px; z-index: 2; width: 48px; height: 48px; min-height: 0; padding: 0; border-radius: 50%; font-size: 22px; background: #ffffff18; border: 1px solid #ffffff30; }
