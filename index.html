@@ -194,6 +194,13 @@
             <button id="spUse" class="primary">Usar esta playlist</button>
             <button id="spManual" class="ghost">Volver a modo manual</button>
           </div>
+          <div class="linkbox">
+            <label for="spLink">¿La playlist no es tuya? Pega su link
+              <input id="spLink" type="text" autocomplete="off" spellcheck="false" placeholder="https://open.spotify.com/playlist/…">
+            </label>
+            <p class="tip">En Spotify: ⋯ → Compartir → Copiar enlace. Funciona con cualquier playlist; Temón la pone en aleatorio y ve qué canción suena.</p>
+            <button id="spLinkUse" class="primary">Usar este link</button>
+          </div>
           <button id="spLogout" class="ghost" style="margin-top:10px">Desconectar Spotify</button>
         </div>
         <p id="spErr" class="err" hidden></p>

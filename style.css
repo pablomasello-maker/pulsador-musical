@@ -273,3 +273,4 @@ button.go:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 
 .fx.wheel .wres { font: 800 30px var(--display); min-height: 36px; text-align: center; }
 @media (prefers-reduced-motion: reduce) { .stage::before, .mascot.bounce svg, .opt.wrong, .opt.right, .fx.banner .bcard { animation: none !important; } }
 .opt:has(.ow:empty) .ot { grid-row: 1 / 3; }
+.linkbox { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }

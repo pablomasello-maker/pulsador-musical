@@ -252,6 +252,9 @@
   let code = null;
   let music = "manual"; // "manual" | "spotify"
   let tracks = [];
+  let link = null; // { id, name }: playlist ajena por link (se reproduce en aleatorio, sin leer sus canciones)
+  let linkStarted = false;
+  let seen = []; // canciones que ya sonaron en modo link (sirven para armar opciones)
   let played = new Set();
   let current = null;
   let answerIdx = null; // opción correcta: solo la sabe el anfitrión hasta el final
@@ -259,7 +262,7 @@
 
   const randomCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 
-  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, answerIdx, penalty, music, playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
+  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, answerIdx, penalty, music, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
   function startHost(saved) {
     role = "host";
@@ -273,6 +276,7 @@
       answerIdx = saved.answerIdx ?? null;
       penalty = !!saved.penalty; $("penalty").checked = penalty;
       played = new Set(saved.played || []);
+      seen = Array.isArray(saved.seen) ? saved.seen : [];
       if (H.phase === "open" || H.phase === "answering") { H.phase = "reveal"; H.queue = []; H.reveal = null; H.answer = answerIdx; }
       H.left = null; H.running = false; H.playing = false;
     }
@@ -446,7 +450,8 @@
   }, 200);
 
   async function playCurrent() {
-    await Spotify.play(current, current.pos);
+    if (link) { await Spotify.seek(current.pos || 0); await Spotify.resume(); }
+    else await Spotify.play(current, current.pos);
     H.playing = true; stopped = false; startSnippet();
   }
 
@@ -489,7 +494,7 @@
       wrong = [...set].map(String);
     } else {
       const seen = new Set([norm(right)]);
-      for (const x of shuffle(tracks.slice())) {
+      for (const x of shuffle(link ? [...seen, ...tracks] : tracks.slice())) {
         const v = tidy(x[f]), k = norm(v);
         if (!k || seen.has(k)) continue;
         seen.add(k); wrong.push(v);
@@ -562,7 +567,21 @@
     const ids = Object.keys(CH).filter((k) => !CH[k].meta);
     const ch = roulette ? ids[Math.floor(Math.random() * ids.length)] : H.pick;
     const c = CH[ch];
-    if (music === "spotify") {
+    if (music === "spotify" && link) {
+      $("openRound").disabled = true;
+      try {
+        const prev = current && current.uri;
+        if (!linkStarted) await Spotify.playContext(link.id); else await Spotify.next();
+        linkStarted = true;
+        const t = await Spotify.nowPlaying(prev);
+        if (!t) throw new Error("No pude ver qué canción suena. Revisa que la app de Spotify esté abierta en este móvil.");
+        t.pos = c.randomStart && t.ms > 30000 ? Math.floor(t.ms * (0.1 + Math.random() * 0.7)) : t.ms > 90000 ? Math.floor(t.ms * 0.3) : 0;
+        if (t.pos) await Spotify.seek(t.pos);
+        current = t; H.ch = ch; H.playing = true; stopped = false; startSnippet();
+        if (!seen.some((x) => x.uri === t.uri)) seen.push(t);
+      } catch (e) { show($("roundErr"), e.message); $("openRound").disabled = false; return; }
+      $("openRound").disabled = false;
+    } else if (music === "spotify") {
       let pool = tracks.filter((t) => !played.has(t.uri));
       if (!pool.length) { played.clear(); pool = tracks.slice(); }
       if (!pool.length) { show($("roundErr"), "La playlist no tiene canciones que se puedan reproducir."); return; }
@@ -692,21 +711,46 @@
       saveHost();
       try { await Spotify.login($("spClient").value); } catch (e) { show($("spErr"), e.message); }
     };
-    $("spLogout").onclick = () => { Spotify.logout(); music = "manual"; tracks = []; refreshSpotify(); publish(); };
-    $("spManual").onclick = () => { music = "manual"; current = null; publish(); refreshSpotify(); };
+    $("spLogout").onclick = () => { Spotify.logout(); music = "manual"; tracks = []; link = null; refreshSpotify(); publish(); };
+    $("spManual").onclick = () => { music = "manual"; current = null; link = null; publish(); refreshSpotify(); };
+    $("spLinkUse").onclick = async () => {
+      const id = Spotify.parsePlaylist($("spLink").value);
+      show($("spErr"), "");
+      if (!id) { show($("spErr"), "Ese link no parece de una playlist. En Spotify: ⋯ → Compartir → Copiar enlace."); return; }
+      $("spLinkUse").disabled = true;
+      const name = await Spotify.playlistName(id);
+      link = { id, name }; linkStarted = false; music = "spotify";
+      $("spCount").textContent = `Playlist por link${name ? ": " + name : ""}. Las canciones salen en aleatorio.`;
+      $("spLinkUse").disabled = false;
+      saveHost(); publish();
+      // Las opciones del modo Normal necesitan otras canciones: sumamos las de tus playlists (si hay) a las que vayan sonando.
+      if (!tracks.length) loadOwnPool();
+    };
     $("spUse").onclick = async () => {
       const id = $("spPlaylist").value; if (!id) return;
       show($("spErr"), ""); $("spUse").disabled = true; $("spCount").textContent = "Cargando canciones…";
       try {
         tracks = await Spotify.playlistTracks(id);
         if (!tracks.length) throw new Error("Esa playlist no tiene canciones que se puedan reproducir.");
-        music = "spotify"; saveHost(); publish();
+        music = "spotify"; link = null; saveHost(); publish();
         $("spCount").textContent = `${tracks.length} canciones listas. Modo Spotify activado.`;
-      } catch (e) { show($("spErr"), e.status === 403 || e.status === 404 ? "Spotify no deja leer esa playlist. Usa una que sea tuya o colaborativa." : e.message); $("spCount").textContent = ""; }
+      } catch (e) { show($("spErr"), e.status === 403 || e.status === 404 ? "Spotify no deja leer esa playlist porque no es tuya. Pega su link en el cuadro de abajo." : e.message); $("spCount").textContent = ""; }
       $("spUse").disabled = false;
     };
+    if (saved && saved.music === "spotify" && saved.link && saved.link.id && Spotify.connected()) {
+      link = saved.link; music = "spotify"; $("spLink").value = "https://open.spotify.com/playlist/" + link.id;
+      $("spCount").textContent = `Playlist por link${link.name ? ": " + link.name : ""}. Las canciones salen en aleatorio.`;
+      await refreshSpotify(false); loadOwnPool(); return;
+    }
     if (saved && saved.music === "spotify" && saved.playlist) { $("spPlaylist").dataset.want = saved.playlist; }
     await refreshSpotify(saved && saved.music === "spotify");
+  }
+
+  async function loadOwnPool() {
+    try {
+      const lists = (await Spotify.playlists()).slice(0, 3);
+      for (const p of lists) { const t = await Spotify.playlistTracks(p.id).catch(() => []); if (link) tracks = tracks.concat(t); }
+    } catch {}
   }
 
   async function refreshSpotify(autoUse) {

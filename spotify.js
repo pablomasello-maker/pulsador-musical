@@ -88,6 +88,26 @@ window.Spotify = (() => {
   }
 
   // Canciones de una playlist (hasta 500). Spotify renombró /tracks a /items en 2026; probamos los dos.
+  const toTrack = (t) => ({
+    uri: t.uri,
+    title: t.name,
+    artist: (t.artists || []).map((a) => a.name).join(", "),
+    album: t.album ? t.album.name : "",
+    year: t.album && t.album.release_date ? t.album.release_date.slice(0, 4) : "",
+    img: t.album && t.album.images && t.album.images.length ? (t.album.images[1] || t.album.images[0]).url : "",
+    ms: t.duration_ms || 0,
+  });
+
+  // Acepta el link para compartir de Spotify, una URI spotify:playlist:... o el ID suelto.
+  function parsePlaylist(input) {
+    const v = String(input || "").trim();
+    const m = v.match(/playlist[/:]([A-Za-z0-9]{22})/) || v.match(/^([A-Za-z0-9]{22})$/);
+    return m ? m[1] : null;
+  }
+  async function playlistName(id) {
+    try { const j = await api(`/playlists/${encodeURIComponent(id)}?fields=name`); return (j && j.name) || ""; } catch { return ""; }
+  }
+
   async function playlistTracks(id) {
     const tracks = [];
     let next = `/playlists/${encodeURIComponent(id)}/items?limit=50`;
@@ -97,15 +117,7 @@ window.Spotify = (() => {
       for (const it of j.items || []) {
         const t = it && (it.track || it.item);
         if (!t || t.type !== "track" || !t.uri || t.is_local) continue;
-        tracks.push({
-          uri: t.uri,
-          title: t.name,
-          artist: (t.artists || []).map((a) => a.name).join(", "),
-          album: t.album ? t.album.name : "",
-          year: t.album && t.album.release_date ? t.album.release_date.slice(0, 4) : "",
-          img: t.album && t.album.images && t.album.images.length ? (t.album.images[1] || t.album.images[0]).url : "",
-          ms: t.duration_ms || 0,
-        });
+        tracks.push(toTrack(t));
       }
       next = j.next;
     }
@@ -121,9 +133,34 @@ window.Spotify = (() => {
     try { await api("/me/player/play", { method: "PUT", body: JSON.stringify({ uris: [track.uri], position_ms: pos }) }); }
     catch (e) { if (noDevice(e)) throw new Error(deviceMsg); throw e; }
   }
+  // Modo link: Spotify no deja leer las canciones de playlists ajenas, pero sí reproducirlas.
+  // Ponemos la playlist en aleatorio y preguntamos qué está sonando.
+  async function playContext(id) {
+    try {
+      await api("/me/player/shuffle?state=true", { method: "PUT" }).catch((e) => { if (noDevice(e)) throw e; });
+      await api("/me/player/play", { method: "PUT", body: JSON.stringify({ context_uri: "spotify:playlist:" + id }) });
+    } catch (e) { if (noDevice(e)) throw new Error(deviceMsg); throw e; }
+  }
+  async function next() {
+    try { await api("/me/player/next", { method: "POST" }); }
+    catch (e) { if (noDevice(e)) throw new Error(deviceMsg); throw e; }
+  }
+  async function seek(ms) { try { await api("/me/player/seek?position_ms=" + Math.max(0, Math.floor(ms)), { method: "PUT" }); } catch {} }
+  // Espera a que suene una canción distinta de "prev" (hasta ~6 s) y la devuelve.
+  async function nowPlaying(prev) {
+    let last = null;
+    for (let i = 0; i < 15; i++) {
+      await new Promise((r) => setTimeout(r, i ? 400 : 700));
+      const j = await api("/me/player/currently-playing").catch(() => null);
+      const t = j && (j.item || j.track);
+      if (t && t.type === "track" && t.uri) { last = toTrack(t); if (t.uri !== prev) return last; }
+    }
+    return last;
+  }
+
   async function pause() { try { await api("/me/player/pause", { method: "PUT" }); } catch {} }
   async function resume() { try { await api("/me/player/play", { method: "PUT" }); } catch {} }
   function logout() { save(null); }
 
-  return { builtin, redirectUri, clientId, connected, login, handleRedirect, me, playlists, playlistTracks, play, pause, resume, logout };
+  return { builtin, redirectUri, clientId, connected, login, handleRedirect, me, playlists, playlistTracks, parsePlaylist, playlistName, playContext, next, seek, nowPlaying, play, pause, resume, logout };
 })();
