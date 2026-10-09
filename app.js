@@ -273,7 +273,7 @@
   // =====================================================================
   const guesses = {}; // pid -> año (solo lo sabe el anfitrión hasta el final)
   const H = { phase: "lobby", round: 0, kind: "cancion", pick: "clasico", ch: "clasico", roulette: false, playing: false, lim: 0,
-    done: [], year: null, results: null, mode: "normal", rmode: "pro", goal: "free", bomb: false, opts: null, picks: {}, answer: null, rebound: false, ev: 0, evt: null,
+    done: [], year: null, results: null, mode: "normal", rmode: "pro", goal: "p30", bomb: false, opts: null, picks: {}, answer: null, rebound: false, ev: 0, evt: null,
     queue: [], locked: [], bl: {}, scores: {}, names: {}, last: null, reveal: null, timeout: false, online: [] };
   const conns = new Map(); // id de pestaña del jugador -> { pid, seen }
   let penalty = false;
@@ -413,7 +413,7 @@
   function sendState() {
     if (!net) return;
     H.online = [...new Set([...conns.values()].map((c) => c.pid))];
-    const st = { ...H, left: H.running ? Math.max(0, deadline - Date.now()) : H.left, t: Date.now() };
+    const st = { ...H, autoNext, left: H.running ? Math.max(0, deadline - Date.now()) : H.left, t: Date.now() };
     delete st.bl;
     net.pub(code + "/down", { t: "state", st }, true);
   }
@@ -533,6 +533,9 @@
       const n = Math.ceil((nextAt - Date.now()) / 1000);
       $("hNext").hidden = false; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
       if (n <= 0 && !$("openRound").disabled) { nextAt = Infinity; $("hNext").hidden = true; $("openRound").click(); }
+    } else if (autoNext && H.phase === "final") {
+      if (nextRound !== -2) { nextRound = -2; nextAt = Date.now() + CHAMP_MS + 500; }
+      if (Date.now() >= nextAt) { nextAt = Infinity; restartMatch(); }
     } else { $("hNext").hidden = true; if (H.phase !== "reveal") nextRound = -1; }
     if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
     if (H.running && H.phase === "open" && Date.now() >= deadline) {
@@ -620,11 +623,22 @@
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
-    else if (e.type === "final") { const w = winnerOf(H); Fx.win("¡Fin de la partida!", w ? `Ganó ${nameOf(H, w)}` : "", "cancion"); setTimeout(() => Fx.confetti(), 900); }
+    else if (e.type === "final") champion({ ...H, autoNext }, null);
     else if (e.type === "year") {
       const top = (H.results || [])[0];
       if (top && top.pts) Fx.win(`Era ${H.year}`, `¡${nameOf(H, top.pid)} ${top.pts === 3 ? "lo clavó" : "estuvo cerca"}!`, "anio");
       else Fx.lose(`Era ${H.year}`, "Nadie se acercó", "anio");
+    }
+  }
+  // Cinemática del campeón (en todos los móviles). Con "Pasar sola" después arranca otra partida.
+  const CHAMP_MS = 11000;
+  function champion(st, me) {
+    const w = winnerOf(st), sc = st.scores || {};
+    const next = st.autoNext ? "Nueva partida" : "";
+    if (w) Fx.trophy(me && w === me ? "¡GANASTE!" : "¡CAMPEÓN!", nameOf(st, w), `${sc[w]} puntos`, CHAMP_MS, next);
+    else {
+      const top = Math.max(0, ...Object.values(sc)), ids = Object.keys(sc).filter((id) => sc[id] === top);
+      Fx.trophy("¡EMPATE!", ids.map((id) => nameOf(st, id)).join(" y "), `${top} puntos cada uno`, CHAMP_MS, next);
     }
   }
   const BOMB = { win: 10, lose: 5 };
@@ -841,6 +855,15 @@
     ev("new"); publish();
   }
   $("rematch").onclick = newGame;
+  // Partida nueva automática: otro desafío (si no está la ruleta) y arranca la primera canción.
+  function restartMatch() {
+    if (H.pick !== "ruleta") {
+      const ids = Object.keys(CH).filter((k) => !CH[k].meta && !CH[k].guess && k !== H.pick);
+      H.pick = ids[Math.floor(Math.random() * ids.length)];
+    }
+    newGame();
+    setTimeout(() => { if (H.phase === "lobby" && autoNext && !$("openRound").disabled) $("openRound").click(); }, 3000);
+  }
   // Año exacto: al acabar el tiempo (o votar todos) se puntúa con el año de Spotify, o lo escribe el anfitrión.
   function finishGuess() {
     endRound();
@@ -1153,7 +1176,7 @@
     } else if (e.type === "timeout") { Fx.lose("¡Se acabó el tiempo!", "", kind); vibrate(300); }
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
-    else if (e.type === "final") { const w = winnerOf(st); if (w === pid) { Fx.win("¡Ganaste la partida!", "¡Sos el campeón!", "cancion"); setTimeout(() => Fx.confetti(), 900); } else Fx.info("¡Fin de la partida!", w ? `Ganó ${nameOf(st, w)}` : "", "cancion"); }
+    else if (e.type === "final") { champion(st, pid); if (winnerOf(st) === pid) vibrate([100, 60, 100, 60, 400]); }
     else if (e.type === "year") {
       const r = Array.isArray(st.results) && st.results.find((x) => x.pid === pid);
       if (r && r.pts) Fx.win(r.pts === 3 ? "¡Exacto!" : "¡Cerca!", `Era ${st.year} · +${r.pts}`, "anio");

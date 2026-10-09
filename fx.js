@@ -155,5 +155,40 @@ window.Fx = (() => {
     L.onclick = () => { anim.finish(); };
   }
 
-  return { mascot, COLORS, confetti, flash, shake, banner, win, lose, info, wheel, sound, audio };
+  // ---------- Cinemática del campeón ----------
+  const TROPHY = `<svg viewBox="0 0 200 220" aria-hidden="true">
+    <defs><linearGradient id="tg" x1="0" x2="1"><stop offset="0" stop-color="#ffcf4a"/><stop offset=".45" stop-color="#fff1a8"/><stop offset=".6" stop-color="#ffc21a"/><stop offset="1" stop-color="#d98b00"/></linearGradient>
+    <linearGradient id="tb" x1="0" x2="1"><stop offset="0" stop-color="#6b3fa0"/><stop offset="1" stop-color="#3a1d6e"/></linearGradient></defs>
+    <path d="M52 40 C10 40 12 100 62 104" fill="none" stroke="url(#tg)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M148 40 C190 40 188 100 138 104" fill="none" stroke="url(#tg)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M45 22 H155 V60 C155 104 128 128 100 128 C72 128 45 104 45 60 Z" fill="url(#tg)" stroke="#a86a00" stroke-width="3"/>
+    <path d="M100 48 l7 15 16 2 -12 11 3 16 -14 -8 -14 8 3 -16 -12 -11 16 -2 z" fill="#fff8d6" opacity=".95"/>
+    <rect x="88" y="126" width="24" height="30" fill="url(#tg)" stroke="#a86a00" stroke-width="3"/>
+    <path d="M62 156 H138 L146 180 H54 Z" fill="url(#tg)" stroke="#a86a00" stroke-width="3"/>
+    <rect x="44" y="180" width="112" height="28" rx="6" fill="url(#tb)" stroke="#24104a" stroke-width="3"/>
+    <clipPath id="tclip"><path d="M45 22 H155 V60 C155 104 128 128 100 128 C72 128 45 104 45 60 Z"/><rect x="88" y="126" width="24" height="30"/><path d="M62 156 H138 L146 180 H54 Z"/></clipPath>
+    <g clip-path="url(#tclip)"><rect class="tshine" x="-60" y="10" width="26" height="200" fill="#fff" opacity=".45" transform="skewX(-20)"/></g>
+  </svg>`;
+  // title arriba ("¡CAMPEÓN!"), name grande, sub abajo; ms: cuánto dura (con cuenta regresiva si hay "next").
+  function trophy(title, name, sub, ms = 10000, next = "") {
+    document.querySelectorAll(".fx.trophy, .fx.banner").forEach((b) => b.remove());
+    const L = layer("trophy");
+    L.innerHTML = `<div class="trays"></div><div class="tcard"><p class="ttitle"></p><div class="tcup">${TROPHY}</div>
+      <p class="tname"></p><p class="tsub"></p><p class="tnext"></p></div>`;
+    L.querySelector(".ttitle").textContent = title;
+    const nm = L.querySelector(".tname");
+    [...String(name)].forEach((ch, i) => { const s = document.createElement("span"); s.textContent = ch === " " ? "\u00a0" : ch; s.style.animationDelay = (1.1 + i * 0.06) + "s"; nm.appendChild(s); });
+    L.querySelector(".tsub").textContent = sub || "";
+    tone([[523, .14], [523, .14], [523, .14], [698, .5, "square", .16], [587, .25], [698, .2], [880, .9, "square", .16]], 1);
+    setTimeout(() => confetti(140), 900); setTimeout(() => confetti(120), 2400); setTimeout(() => confetti(120), 4200);
+    const end = Date.now() + ms, tn = L.querySelector(".tnext");
+    const iv = setInterval(() => {
+      const s = Math.ceil((end - Date.now()) / 1000);
+      if (next && s <= Math.min(8, ms / 1000 - 3)) tn.textContent = `${next} en ${Math.max(0, s)}…`;
+      if (s <= 0) { clearInterval(iv); L.classList.add("out"); setTimeout(() => L.remove(), 450); }
+    }, 250);
+    L.onclick = () => { clearInterval(iv); L.classList.add("out"); setTimeout(() => L.remove(), 450); };
+  }
+
+  return { mascot, COLORS, confetti, flash, shake, banner, win, lose, info, wheel, trophy, sound, audio };
 })();
