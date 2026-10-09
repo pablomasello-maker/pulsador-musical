@@ -190,5 +190,23 @@ window.Fx = (() => {
     L.onclick = () => { clearInterval(iv); L.classList.add("out"); setTimeout(() => L.remove(), 450); };
   }
 
-  return { mascot, COLORS, confetti, flash, shake, banner, win, lose, info, wheel, trophy, sound, audio };
+  // Cartel con pregunta y botones: buttons = [{ label, cls, fn }]. Se cierra al tocar uno.
+  function ask(title, sub, buttons) {
+    document.querySelectorAll(".fx.ask").forEach((b) => b.remove());
+    const L = layer("ask");
+    const card = document.createElement("div"); card.className = "acard";
+    const t = document.createElement("p"); t.className = "at"; t.textContent = title;
+    const s = document.createElement("p"); s.className = "as"; s.textContent = sub || "";
+    const row = document.createElement("div"); row.className = "arow";
+    for (const b of buttons || []) {
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = b.cls || ""; btn.textContent = b.label;
+      btn.onclick = () => { L.remove(); b.fn && b.fn(); };
+      row.appendChild(btn);
+    }
+    card.append(t, s, row); L.appendChild(card);
+    sound.pop();
+    return L;
+  }
+
+  return { mascot, COLORS, confetti, flash, shake, banner, win, lose, info, wheel, trophy, ask, sound, audio };
 })();

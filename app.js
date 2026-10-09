@@ -533,9 +533,6 @@
       const n = Math.ceil((nextAt - Date.now()) / 1000);
       $("hNext").hidden = false; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
       if (n <= 0 && !$("openRound").disabled) { nextAt = Infinity; $("hNext").hidden = true; $("openRound").click(); }
-    } else if (autoNext && H.phase === "final") {
-      if (nextRound !== -2) { nextRound = -2; nextAt = Date.now() + CHAMP_MS + 500; }
-      if (Date.now() >= nextAt) { nextAt = Infinity; restartMatch(); }
     } else { $("hNext").hidden = true; if (H.phase !== "reveal") nextRound = -1; }
     if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
     if (H.running && H.phase === "open" && Date.now() >= deadline) {
@@ -623,7 +620,7 @@
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
-    else if (e.type === "final") champion({ ...H, autoNext }, null);
+    else if (e.type === "final") { champion(H, null); setTimeout(askRematch, CHAMP_MS + 300); }
     else if (e.type === "year") {
       const top = (H.results || [])[0];
       if (top && top.pts) Fx.win(`Era ${H.year}`, `¡${nameOf(H, top.pid)} ${top.pts === 3 ? "lo clavó" : "estuvo cerca"}!`, "anio");
@@ -634,7 +631,7 @@
   const CHAMP_MS = 11000;
   function champion(st, me) {
     const w = winnerOf(st), sc = st.scores || {};
-    const next = st.autoNext ? "Nueva partida" : "";
+    const next = "";
     if (w) Fx.trophy(me && w === me ? "¡GANASTE!" : "¡CAMPEÓN!", nameOf(st, w), `${sc[w]} puntos`, CHAMP_MS, next);
     else {
       const top = Math.max(0, ...Object.values(sc)), ids = Object.keys(sc).filter((id) => sc[id] === top);
@@ -850,11 +847,19 @@
     clearTimeout(endTimer);
     stopSnippet(); stopMusic(); try { Ytp.stop(); } catch {}
     for (const k of Object.keys(H.scores)) H.scores[k] = 0;
-    Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], last: null, reveal: null, done: [], year: null, results: null, opts: null, picks: {}, answer: null, bomb: false, playing: false });
+    Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], last: null, reveal: null, done: [], year: null, results: null, opts: null, picks: {}, answer: null, bomb: false, playing: false, rematch: null });
     played.clear(); current = null; stopped = false; endRound();
     ev("new"); publish();
   }
   $("rematch").onclick = newGame;
+  // Después del trofeo, el anfitrión elige si hay revancha.
+  function askRematch() {
+    if (H.phase !== "final") return;
+    Fx.ask("¿Revancha?", "Otra partida con los mismos jugadores", [
+      { label: "¡Sí!", cls: "primary", fn: () => { if (H.phase === "final") { H.rematch = "yes"; restartMatch(); } } },
+      { label: "No", cls: "ghost", fn: () => { H.rematch = "no"; publish(); } },
+    ]);
+  }
   // Partida nueva automática: otro desafío (si no está la ruleta) y arranca la primera canción.
   function restartMatch() {
     if (H.pick !== "ruleta") {
@@ -1106,6 +1111,9 @@
           if (seenRound !== null && st.round !== seenRound && live) roundFx(st);
           if (seenEv !== null && st.ev !== seenEv) playerFx(st);
           seenRound = st.round; seenEv = st.ev;
+          // Cartel de revancha: se va cuando el anfitrión decide.
+          const wait = document.querySelector(".fx.ask.wait");
+          if (wait && (st.phase !== "final" || st.rematch)) { wait.remove(); if (st.rematch === "no") Fx.info("Sin revancha", "¡Gracias por jugar!", "cancion"); }
           renderPlayer();
         }
       },
@@ -1176,7 +1184,10 @@
     } else if (e.type === "timeout") { Fx.lose("¡Se acabó el tiempo!", "", kind); vibrate(300); }
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
-    else if (e.type === "final") { champion(st, pid); if (winnerOf(st) === pid) vibrate([100, 60, 100, 60, 400]); }
+    else if (e.type === "final") {
+      champion(st, pid); if (winnerOf(st) === pid) vibrate([100, 60, 100, 60, 400]);
+      setTimeout(() => { if (st && st.phase === "final" && !st.rematch) Fx.ask("¿Revancha?", "Lo decide el anfitrión…", []).classList.add("wait"); }, CHAMP_MS + 300);
+    }
     else if (e.type === "year") {
       const r = Array.isArray(st.results) && st.results.find((x) => x.pid === pid);
       if (r && r.pts) Fx.win(r.pts === 3 ? "¡Exacto!" : "¡Cerca!", `Era ${st.year} · +${r.pts}`, "anio");

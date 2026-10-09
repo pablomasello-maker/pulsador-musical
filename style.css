@@ -401,3 +401,13 @@ html.introOpen, html.introOpen body { overflow: hidden; height: 100%; overscroll
 .tsub { font: 400 22px "Lilita One", var(--display); color: #ffd34d; animation: fadeup .5s 1.8s both; }
 .tnext { min-height: 1.4em; font-weight: 700; color: #c9c3ff; }
 @media (prefers-reduced-motion: reduce) { .fx.trophy *, .fx.trophy { animation: none !important; } }
+/* Cartel de revancha */
+.fx.ask { pointer-events: auto; z-index: 95; display: grid; place-items: center; padding: 20px; background: #07061acc; animation: tin .3s ease-out both; }
+.fx.ask .acard { width: min(100%, 360px); background: #fff8ec; color: #14102a; border: 6px solid #ffb627; border-radius: 28px; padding: 22px 20px 20px; text-align: center; box-shadow: 0 20px 50px #000a; animation: tpop .5s cubic-bezier(.2,1.6,.4,1) both; }
+.fx.ask .at { font: 400 48px/1 "Lilita One", var(--display); color: #ff4fa3; -webkit-text-stroke: 2px #14102a; paint-order: stroke fill; }
+.fx.ask .as { margin: 8px 0 16px; font-weight: 700; color: #4a4466; }
+.fx.ask .arow { display: flex; gap: 12px; }
+.fx.ask .arow button { flex: 1; font: 400 26px "Lilita One", var(--display); padding: 14px; }
+.fx.ask .arow .ghost { color: #4a4466; border-color: #cfc8e6; }
+.fx.ask.wait .acard { border-color: #3d8bff; }
+.fx.ask.wait .arow { display: none; }
