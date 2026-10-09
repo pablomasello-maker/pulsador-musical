@@ -411,3 +411,7 @@ html.introOpen, html.introOpen body { overflow: hidden; height: 100%; overscroll
 .fx.ask .arow .ghost { color: #4a4466; border-color: #cfc8e6; }
 .fx.ask.wait .acard { border-color: #3d8bff; }
 .fx.ask.wait .arow { display: none; }
+.fx.ask.speaker .arow { flex-direction: column; }
+.fx.ask .arow button { font-size: 22px; }
+.fx.ask .at { font-size: 38px; }
+.fx.ask, .fx.ask * { box-sizing: border-box; }

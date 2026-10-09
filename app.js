@@ -318,9 +318,35 @@
     $("redirectUri").textContent = Spotify.redirectUri();
     openRoom();
     renderHost();
+    // Sala nueva: preguntar por dónde va a sonar la música.
+    if (!saved && (!params.has("broker") || params.has("spk"))) setTimeout(askSpeaker, 1200); // en pruebas locales no molesta
     if (SPOTIFY_UI) initSpotifyPanel(saved).then(applyShared);
     else if (music === "spotify") music = "deck";
   }
+
+  // ---------- Parlante ----------
+  const isAndroid = /Android/i.test(navigator.userAgent), isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  function askSpeaker() {
+    if (role !== "host") return;
+    Fx.ask("¿Dónde suena la música?", "Mientras se suman los jugadores, elegí el parlante.", [
+      { label: "🔊 Parlante Bluetooth", cls: "primary", fn: openBluetooth },
+      { label: "📱 Este celular", cls: "ghost", fn: () => Fx.info("Suena en este celular", "Subí el volumen al máximo", "cancion") },
+    ]).classList.add("speaker");
+  }
+  // Abre los ajustes de Bluetooth si el celular lo permite; si no, explica cómo hacerlo.
+  function openBluetooth() {
+    const howTo = () => Fx.ask("Conectá el parlante", isIOS
+      ? "Abrí el Centro de control (deslizá desde la esquina de arriba a la derecha), mantené apretado el cuadro de conexiones, tocá Bluetooth y elegí tu parlante."
+      : "Deslizá desde arriba de la pantalla, mantené apretado el ícono de Bluetooth y elegí tu parlante. Después volvé a Temón.",
+      [{ label: "¡Listo!", cls: "primary", fn: () => Fx.info("¡A todo volumen!", "Ya podés arrancar", "cancion") }]);
+    if (!isAndroid) { howTo(); return; }
+    let left = false;
+    const onHide = () => { if (document.visibilityState === "hidden") left = true; else if (left) { document.removeEventListener("visibilitychange", onHide); Fx.info("¡Parlante listo!", "Ya podés arrancar", "cancion"); } };
+    document.addEventListener("visibilitychange", onHide);
+    location.href = "intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end";
+    setTimeout(() => { if (!left) { document.removeEventListener("visibilitychange", onHide); howTo(); } }, 1500);
+  }
+  $("speakerBtn").onclick = askSpeaker;
 
   function openRoom() {
     if (net) net.close();
