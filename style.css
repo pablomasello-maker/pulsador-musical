@@ -373,3 +373,4 @@ html.introOpen, html.introOpen body { overflow: hidden; height: 100%; overscroll
 .igo, .intro.quick .igo { animation: fadeup .5s 2.1s both; }
 .intro.quick .igo { animation-duration: .35s; animation-delay: 0s; }
 @media (max-height: 820px) { .ivinyl { width: 104px; height: 104px; } .ilabel { width: 40px; height: 40px; font-size: 19px; } .ititle { font-size: clamp(46px, 13vw, 64px); } .icenter { gap: 9px; } .isteps li { padding: 7px 12px; } .isteps span { font-size: 15px; } .itag { font-size: 19px; } }
+.cut.next { background: #3d8bff; color: #fff; }

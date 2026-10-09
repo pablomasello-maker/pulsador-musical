@@ -521,8 +521,19 @@
   function clearClock() { H.left = null; H.running = false; deadline = null; }
   function endRound() { clearClock(); stopSnippet(); }
 
+  // Pasar sola: 30 s por canción como máximo y, cuando se ve la respuesta, arranca la siguiente.
+  const AUTO_LIMIT = 30, AUTO_WAIT = 7000;
+  let autoNext = ls.get("pm_autonext") !== "0", nextAt = 0, nextRound = -1;
+  $("autoNext").checked = autoNext;
+  $("autoNext").onchange = (e) => { autoNext = e.target.checked; ls.set("pm_autonext", autoNext ? "1" : "0"); nextRound = -1; };
   setInterval(() => {
     if (role !== "host") return;
+    if (autoNext && H.phase === "reveal" && !gameOver()) {
+      if (nextRound !== H.round) { nextRound = H.round; nextAt = Date.now() + AUTO_WAIT; }
+      const n = Math.ceil((nextAt - Date.now()) / 1000);
+      $("hNext").hidden = false; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
+      if (n <= 0 && !$("openRound").disabled) { nextAt = Infinity; $("hNext").hidden = true; $("openRound").click(); }
+    } else { $("hNext").hidden = true; if (H.phase !== "reveal") nextRound = -1; }
     if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
     if (H.running && H.phase === "open" && Date.now() >= deadline) {
       endRound(); H.phase = "reveal"; H.last = null; H.timeout = true; H.queue = [];
@@ -712,13 +723,14 @@
     H.round += 1; H.queue = []; H.locked = []; H.bl = {}; H.last = null; H.reveal = null; H.timeout = false; H.phase = "open";
     H.done = []; H.year = null; H.results = null; for (const k of Object.keys(guesses)) delete guesses[k];
     clearClock();
-    H.lim = c.limit ? c.limit * 1000 : 0;
-    if (c.limit) H.left = H.lim;
+    const lim = c.limit || (autoNext && !c.guess ? AUTO_LIMIT : 0);
+    H.lim = lim ? lim * 1000 : 0;
+    if (lim) H.left = H.lim;
     if (music === "deck") {
       // Mazos: la ronda arranca con «Ya suena» o, con YouTube, sola cuando el video empieza (después de la publicidad).
       H.phase = "cue"; H.playing = false; stopSnippet();
       autoGoWhenPlaying();
-    } else if (c.limit) startClock();
+    } else if (H.lim) startClock();
     publish(); roundFx(H);
     if (H.phase === "cue") $("hCue").scrollIntoView({ behavior: "smooth", block: "center" });
   };
@@ -803,11 +815,13 @@
   // ---------- Fin de la partida ----------
   const GOALS = { free: ["Libre", 0, ""], p30: ["A 30 puntos", 30, "points"], r15: ["A 15 rondas", 15, "rounds"] };
   let endTimer = null;
-  function checkEnd() {
+  function gameOver() {
     const g = GOALS[H.goal] || GOALS.free;
     const top = Math.max(0, ...Object.values(H.scores));
-    const over = g[2] === "points" ? top >= g[1] : g[2] === "rounds" ? H.round >= g[1] : false;
-    if (!over) return;
+    return g[2] === "points" ? top >= g[1] : g[2] === "rounds" ? H.round >= g[1] : false;
+  }
+  function checkEnd() {
+    if (!gameOver()) return;
     clearTimeout(endTimer);
     // Deja ver la respuesta unos segundos y después el podio.
     endTimer = setTimeout(() => { if (H.phase !== "reveal") return; H.phase = "final"; ev("final"); publish(); }, 4000);

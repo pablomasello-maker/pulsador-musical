@@ -1,5 +1,5 @@
 // Guarda la app para que abra rápido. Siempre intenta la red primero para recibir actualizaciones.
-const CACHE = "pulsador-v24";
+const CACHE = "pulsador-v25";
 const FILES = ["./", "index.html", "style.css", "app.js", "spotify.js", "cassette.js", "fx.js", "intro.js", "audio/intro-loop.mp3", "audio/intro-end.mp3", "decks.js", "videos.js", "yt.js", "vendor/paho-mqtt-min.js", "net.js", "vendor/qrcode.js", "icon.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
