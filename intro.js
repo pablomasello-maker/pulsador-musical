@@ -102,9 +102,8 @@ const SynthRiff = (() => {
   return { setup, start, finish, stop, running, isPlaying, resume: () => ac && ac.resume() };
 })();
 
-// Grabación del tema (audio/intro-loop.mp3 y audio/intro-end.mp3, hechos para Temón). Si no carga, se toca el riff sintetizado.
+// Tema de la intro: «Adivina la melodía» de Pablo (audio/intro-tema.mp3, primer minuto y cuarto). Si no carga, se toca el riff sintetizado.
 window.IntroRiff = (() => {
-  const LOOP_START = 0.5, LOOP_LEN = 8 * 4 * 60 / 140; // 8 compases a 140 bpm
   let ac = null, out = null, bufs = null, loading = null, src = null, want = false, useSynth = false;
   function setup() {
     if (useSynth) return SynthRiff.setup();
@@ -112,8 +111,8 @@ window.IntroRiff = (() => {
     try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { useSynth = true; return SynthRiff.setup(); }
     out = ac.createGain(); out.gain.value = 0.8; out.connect(ac.destination);
     const get = (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u); return r.arrayBuffer(); }).then((b) => new Promise((res, rej) => ac.decodeAudioData(b, res, rej)));
-    loading = Promise.all([get("audio/intro-loop.mp3"), get("audio/intro-end.mp3")])
-      .then(([loop, end]) => { bufs = { loop, end }; if (want) playLoop(); })
+    loading = get("audio/intro-tema.mp3")
+      .then((loop) => { bufs = { loop }; if (want) playLoop(); })
       .catch(() => { useSynth = true; if (want) SynthRiff.start(); });
     return true;
   }
@@ -121,8 +120,7 @@ window.IntroRiff = (() => {
     if (src || !bufs) return;
     out.gain.cancelScheduledValues(0); out.gain.value = 0.8;
     src = ac.createBufferSource(); src.buffer = bufs.loop; src.loop = true;
-    src.loopStart = LOOP_START; src.loopEnd = LOOP_START + LOOP_LEN;
-    src.connect(out); src.start(ac.currentTime + 0.02, LOOP_START);
+    src.connect(out); src.start(ac.currentTime + 0.02);
   }
   function start() {
     if (useSynth) return SynthRiff.start();
@@ -134,9 +132,8 @@ window.IntroRiff = (() => {
     if (!setup()) return;
     ac.resume(); want = false;
     const t = ac.currentTime + 0.02;
-    if (src) { const old = src, g = ac.createGain(); old.disconnect(); old.connect(g).connect(out); g.gain.setValueAtTime(1, t); g.gain.linearRampToValueAtTime(0, t + 0.08); old.stop(t + 0.1); src = null; }
-    const hit = () => { const e = ac.createBufferSource(); e.buffer = bufs.end; e.connect(out); e.start(ac.currentTime + 0.01); };
-    if (bufs) hit(); else if (loading) loading.then(() => bufs && hit());
+    // Al entrar al juego el tema baja de a poco.
+    if (src) { const old = src, g = ac.createGain(); old.disconnect(); old.connect(g).connect(out); g.gain.setValueAtTime(1, t); g.gain.linearRampToValueAtTime(0, t + 1.5); old.stop(t + 1.6); src = null; }
   }
   function stop() {
     want = false;
