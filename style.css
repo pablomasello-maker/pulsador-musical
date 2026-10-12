@@ -419,3 +419,5 @@ html.introOpen, html.introOpen body { overflow: hidden; height: 100%; overscroll
 .solobtn { background: linear-gradient(135deg, #22c55e, #3d8bff); color: #fff; border: 0; font-weight: 800; }
 body.solo .roompanel, body.solo #modes, body.solo #modeTip { display: none !important; }
 body.solo #hOpts .opt:not(:disabled) { cursor: pointer; }
+.onlinebtn { background: linear-gradient(135deg, #a855f7, #ff4fa3); color: #fff; border: 0; font-weight: 800; }
+#player .ytbox { margin-top: 12px; }

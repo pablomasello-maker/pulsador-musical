@@ -106,7 +106,7 @@
       ss.set("pm_player", { code });
       startPlayer(code);
     } else {
-      startHost(null, as === "solo" ? soloLevel : null);
+      startHost(null, as === "solo" ? soloLevel : as === "online" ? "normal" : null, as === "online");
     }
     audio(); keepAwake();
   }
@@ -117,6 +117,7 @@
     { label: "😎 Normal", cls: "primary", fn: () => { soloLevel = "normal"; enter("solo"); } },
     { label: "🤖 Difícil", cls: "primary", fn: () => { soloLevel = "dificil"; enter("solo"); } },
   ]).classList.add("speaker");
+  $("joinOnline").onclick = () => enter("online");
   $("joinPlayer").onclick = () => enter("player");
   $("joinHost").onclick = () => enter("host");
   $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") enter("player"); });
@@ -299,7 +300,7 @@
 
   const randomCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 
-  function saveHost() { ss.set("pm_host", { code, solo, H: { ...H, online: [] }, answerIdx, penalty, music, deckSel: [...deckSel], cur: music === "deck" ? current : null, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
+  function saveHost() { ss.set("pm_host", { code, solo, pub, pubGo, H: { ...H, online: [] }, answerIdx, penalty, music, deckSel: [...deckSel], cur: music === "deck" ? current : null, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
   // ---------- Contra la compu ----------
   const BOTS = [["csolobot0001", "pbotrobotina", "Robotina 🤖"], ["csolobot0002", "pbotdjchip00", "DJ Chip 💿"], ["csolobot0003", "pbotbitbunny", "Bit Bunny 🐰"]];
@@ -308,8 +309,71 @@
   let solo = null, botRound = -1;
   function joinSoloPlayers() {
     onPlayerMsg({ t: "hello", cid: ME_CID, pid, name: myName });
-    for (const [cid, id, name] of BOTS) onPlayerMsg({ t: "hello", cid, pid: id, name });
+    if (!pub) addBots(BOTS.length);
   }
+  function addBots(n) { for (const [cid, id, name] of BOTS.slice(0, n)) onPlayerMsg({ t: "hello", cid, pid: id, name }); }
+
+  // ---------- Partida online ----------
+  // Cada sala pública se anuncia en "pub/r/CÓDIGO". Al buscar, este celular arma su propia sala y escucha los anuncios:
+  // si hay otra sala esperando o en juego, se pasa a esa como jugador. Si no aparece nadie, completan los de la compu.
+  const PUB_SEARCH = 5000, PUB_WAIT = 20000, PUB_MAX = 6, PUB_SIZE = 4;
+  let pub = false, pubGo = false, pubStart = 0, searchCard = null;
+  const ads = new Map();
+  const humans = () => [...new Set([...conns.values()].map((c) => c.pid))].filter((id) => !id.startsWith("pbot"));
+  function advertise(closed) {
+    if (!pub || !net) return;
+    net.pub("pub/r/" + code, closed ? { code, closed: 1 } : { code, n: humans().length, ph: H.phase, s: net.broker(), v: 1 }, true);
+  }
+  function onAd(d, retained) {
+    // Los anuncios guardados pueden ser viejos: solo cuentan los que llegan en vivo (cada sala se anuncia cada 4 s).
+    if (!pub || retained || !d || typeof d.code !== "string" || d.code === code) return;
+    ads.set(d.code, { ...d, at: Date.now() });
+    if (Date.now() - pubStart >= PUB_SEARCH) pubDecide();
+  }
+  function pubDecide() {
+    if (!pub || role !== "host" || pubGo || H.phase !== "lobby" || humans().length > 1) return false;
+    const now = Date.now();
+    let best = null;
+    const score = (a) => (a.ph === "lobby" ? 100 : 0) + a.n;
+    for (const a of ads.values()) {
+      if (now - a.at > 6000 || a.closed || a.ph === "final" || !/^[A-Z]{4}$/.test(a.code) || !(a.n >= 1) || a.n >= PUB_MAX) continue;
+      // Dos salas esperando con una persona cada una: se pasa la de código mayor, así no se cruzan.
+      if (a.ph === "lobby" && a.n === 1 && a.code > code) continue;
+      if (!best || score(a) > score(best)) best = a;
+    }
+    if (!best) return false;
+    moveToRoom(best);
+    return true;
+  }
+  function moveToRoom(a) {
+    advertise(true);
+    if (net) { net.close(); net = null; }
+    try { Ytp.stop(); } catch {}
+    for (const k of Object.keys(H.scores)) delete H.scores[k];
+    Object.assign(H, { phase: "lobby", round: 0, queue: [], locked: [], names: {}, picks: {}, opts: null, online: [], pub: false });
+    conns.clear(); current = null; pub = false; pubGo = false; solo = null;
+    document.body.classList.remove("solo");
+    ss.set("pm_host", null);
+    if (searchCard) { searchCard.remove(); searchCard = null; }
+    $("host").hidden = true; role = null;
+    joinBroker = Number(a.s) || 0;
+    Fx.info("¡Partida encontrada!", "Entrando…", "cancion");
+    startPlayer(a.code);
+  }
+  function startPub() {
+    pubGo = true;
+    if (searchCard) { searchCard.remove(); searchCard = null; }
+    addBots(Math.max(0, PUB_SIZE - humans().length));
+    H.pick = "clasico";
+    setTimeout(() => { if (role === "host" && H.phase === "lobby" && !$("openRound").disabled) $("openRound").click(); }, 1500);
+  }
+  setInterval(() => {
+    if (role !== "host" || !pub || pubGo || H.phase !== "lobby") return;
+    const t = Date.now() - pubStart;
+    if (searchCard && t >= PUB_SEARCH) { searchCard.remove(); searchCard = null; if (pubDecide()) return; }
+    if (t >= PUB_WAIT || humans().length >= PUB_SIZE) startPub();
+    else renderHost();
+  }, 500);
   // Cada rival contesta una vez por ronda, más rápido y mejor según la dificultad.
   function botsPlay() {
     if (!solo || H.phase !== "open" || !Array.isArray(H.opts) || botRound === H.round) return;
@@ -326,14 +390,21 @@
     }
   }
 
-  function startHost(saved, soloLvl) {
+  function startHost(saved, soloLvl, online) {
     role = "host";
     solo = (saved && saved.solo) || soloLvl || null;
+    pub = !!((saved && saved.pub) || online);
+    pubGo = !!(saved && saved.pubGo); pubStart = Date.now(); ads.clear();
     document.body.classList.toggle("solo", !!solo);
     if (solo) {
       H.mode = "normal"; ytOn = true; $("ytOn").checked = true;
       // El video queda debajo de las opciones: mientras jugás, tenés a la vista las respuestas y no la pantalla del video.
       $("hOpts").after($("ytBox"));
+    } else $("hDeck").after($("ytBox"));
+    H.pub = pub;
+    if (pub) {
+      H.goal = "p30"; autoNext = true; $("autoNext").checked = true;
+      if (!saved) searchCard = Fx.ask("Buscando partida…", "Buscando otros jugadores conectados", []);
     }
     $("start").hidden = true; $("host").hidden = false;
     if (saved) {
@@ -358,6 +429,7 @@
     openRoom();
     renderHost();
     if (solo) joinSoloPlayers();
+    if (pub && pubGo) addBots(BOTS.filter(([, id]) => id in H.scores).length);
     // Sala nueva: preguntar por dónde va a sonar la música.
     if (!saved && !solo && (!params.has("broker") || params.has("spk"))) setTimeout(askSpeaker, 1200); // en pruebas locales no molesta
     if (SPOTIFY_UI) initSpotifyPanel(saved).then(applyShared);
@@ -395,9 +467,10 @@
     net = Net.open({
       onUp: () => { show($("hostErr"), ""); showShare(); publish(); },
       onDown: () => show($("hostErr"), "Sin conexión con el servidor de salas. Reintentando…"),
-      onMessage: (topic, d) => { if (topic === code + "/up") onPlayerMsg(d); },
-    }, { broker: Number(ss.get("pm_broker")) || 0 });
+      onMessage: (topic, d, retained) => { if (topic === code + "/up") onPlayerMsg(d); else if (topic.startsWith("pub/r/")) onAd(d, retained); },
+    }, { broker: pub ? 0 : Number(ss.get("pm_broker")) || 0 });
     net.sub(code + "/up");
+    if (pub) net.sub("pub/r/+");
   }
 
   // Jugadores vistos hace poco: si un móvil deja de dar señales 15 s, sale como desconectado.
@@ -483,8 +556,11 @@
     if (!net) return;
     H.online = [...new Set([...conns.values()].map((c) => c.pid))];
     const st = { ...H, autoNext, left: H.running ? Math.max(0, deadline - Date.now()) : H.left, t: Date.now() };
+    // Online: cada celular reproduce el mismo video desde el mismo punto.
+    if (pub && current && current.vid) { st.vid = current.vid; st.vpos = Math.floor((current.pos || 0) / 1000); }
     delete st.bl;
     net.pub(code + "/down", { t: "state", st }, true);
+    advertise();
   }
   function publish() {
     if (role !== "host") return;
@@ -691,7 +767,10 @@
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
-    else if (e.type === "final") { champion(H, solo ? pid : null); setTimeout(askRematch, CHAMP_MS + 300); }
+    else if (e.type === "final") {
+      champion(H, solo ? pid : null);
+      setTimeout(pub ? () => { if (H.phase === "final") { H.rematch = "yes"; restartMatch(); } } : askRematch, CHAMP_MS + 300);
+    }
     else if (e.type === "year") {
       const top = (H.results || [])[0];
       if (top && top.pts) Fx.win(`Era ${H.year}`, `¡${nameOf(H, top.pid)} ${top.pts === 3 ? "lo clavó" : "estuvo cerca"}!`, "anio");
@@ -824,6 +903,7 @@
   function ytFailed() {
     if (!current || !current.vid) return;
     current.vid = null; Ytp.stop();
+    if (solo) { endRound(); H.playing = false; H.left = H.lim || null; H.phase = "cue"; publish(); setTimeout(() => $("cueSwap").onclick(), 300); return; }
     if (H.phase === "cue") { Fx.info("Este video no se puede ver aquí", "Ponlo tú desde YouTube Music", mascotKind(H)); publish(); return; }
     if (H.phase === "open" && !H.queue.length && !Object.keys(H.picks).length) {
       endRound(); H.playing = false; H.left = H.lim || null; H.phase = "cue";
@@ -993,7 +1073,7 @@
     show($("modeTip"), H.mode === "normal" && music === "manual" ? "En modo libre Temón no sabe qué canción suena, así que las rondas van en Profesional. Elige un mazo para tener opciones." : H.mode === "normal" ? "En Año exacto se sigue eligiendo el año con el contador." : "");
     renderSources();
     const cue = H.phase === "cue" && current;
-    $("hCue").hidden = !cue;
+    $("hCue").hidden = !cue || !!solo;
     if (cue) {
       $("cueLinks").hidden = !!current.vid; $("cueBack").hidden = !!current.vid;
       $("cueTitle").textContent = current.title; $("cueArtist").textContent = current.artist;
@@ -1033,7 +1113,12 @@
     setMascot($("hMascot"), H.phase === "lobby" ? "cancion" : mk, H.phase === "answering" || H.phase === "yearjudge" ? "wow" : H.phase === "reveal" && !(H.last && H.last.ok) && !(H.results && H.results.some((r) => r.pts)) ? "sad" : "happy", live);
     $("hRule").textContent = live ? (H.bomb ? "💣 Ronda bomba: acertar suma 10, fallar resta 5. " : "") + c.rule + (!auto() && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
-    if (H.phase === "lobby" && solo) setStage("h", "", "Contra la compu", "Vos contra 3 rivales", "Elegí el desafío y tocá «Abrir siguiente ronda».");
+    if (H.phase === "lobby" && pub && !pubGo) {
+      const hs = humans().length, secs = Math.max(0, Math.ceil((PUB_WAIT - (Date.now() - pubStart)) / 1000));
+      setStage("h", "", "Partida online", hs > 1 ? `¡${hs} jugadores!` : "Buscando rivales…", `Arranca en ${secs} s. Si faltan jugadores, completan los de la compu.`);
+    }
+    else if (H.phase === "lobby" && pub) setStage("h", "", "Partida online", "¡Arranca!", "Preparate…");
+    else if (H.phase === "lobby" && solo) setStage("h", "", "Contra la compu", "Vos contra 3 rivales", "Elegí el desafío y tocá «Abrir siguiente ronda».");
     else if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn + ((GOALS[H.goal] || GOALS.free)[1] ? ` · Partida ${(GOALS[H.goal])[0].toLowerCase()}` : ""));
     else if (H.phase === "final") setStage("h", "rev", "Fin de la partida", winnerOf(H) ? `¡Ganó ${nameOf(H, winnerOf(H))}!` : "¡Empate!", "Toca «Revancha» para jugar otra.");
     else if (H.phase === "cue" && current && current.vid) setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Cargando el video…", "Si hay publicidad, la ronda arranca cuando termine.");
@@ -1158,8 +1243,31 @@
     pDeck(st, left);
   }, 200);
 
+  let joinBroker = null, wasPub = false, lostCard = null;
+  const pv = { key: null, playing: true };
+  // Online: el video suena en cada celular, debajo de las opciones.
+  function syncVideo() {
+    const box = $("ytBox");
+    if (!st || !st.pub) return;
+    wasPub = true;
+    const live = st.vid && ["cue", "open", "answering", "reveal"].includes(st.phase);
+    if (!live) { if (pv.key) { Ytp.stop(); pv.key = null; } box.hidden = true; return; }
+    box.hidden = false;
+    const key = st.round + "|" + st.vid;
+    if (pv.key !== key) { pv.key = key; pv.playing = true; Ytp.play(box, st.vid, st.vpos || 0, () => {}).catch(() => {}); return; }
+    if (!!st.playing !== pv.playing) { pv.playing = !!st.playing; if (pv.playing) Ytp.resume(); else Ytp.pause(); }
+  }
+  function pubLost(msg) {
+    if (lostCard && lostCard.isConnected) return;
+    Ytp.stop(); pv.key = null;
+    lostCard = Fx.ask("Se cortó la partida", msg, [
+      { label: "🌐 Buscar otra", cls: "primary", fn: () => { backToStart(); enter("online"); } },
+      { label: "Salir", cls: "ghost", fn: backToStart },
+    ]);
+  }
   function startPlayer(c) {
     role = "player"; joinCode = c;
+    $("pOpts").after($("ytBox")); $("ytBox").hidden = true; pv.key = null; wasPub = false;
     $("start").hidden = true; $("player").hidden = false;
     connectPlayer();
   }
@@ -1180,7 +1288,7 @@
       onMessage: (topic, d, retained) => {
         if (topic !== joinCode + "/down") return;
         if (d.t === "full" && d.to === net.cid) { failed("La sala está llena."); net.close(); return; }
-        if (d.t === "closed") { st = null; failed("El anfitrión cerró la sala."); return; }
+        if (d.t === "closed") { st = null; failed("El anfitrión cerró la sala."); if (wasPub) pubLost("El que armó la sala se fue."); return; }
         if (fresh(d, retained) && typeof d.st === "object") {
           st = d.st; lastStateAt = Date.now();
           pDeadline = st.running && typeof st.left === "number" ? Date.now() + st.left : null;
@@ -1191,17 +1299,22 @@
           // Cartel de revancha: se va cuando el anfitrión decide.
           const wait = document.querySelector(".fx.ask.wait");
           if (wait && (st.phase !== "final" || st.rematch)) { wait.remove(); if (st.rematch === "no") Fx.info("Sin revancha", "¡Gracias por jugar!", "cancion"); }
+          if (lostCard) { lostCard.remove(); lostCard = null; }
+          syncVideo();
           renderPlayer();
         }
       },
-    }, { broker: Number(params.get("s")) || 0, probe: { topic: joinCode + "/down", accept: fresh, timeout: 6000 } });
+    }, { broker: joinBroker ?? (Number(params.get("s")) || 0), probe: { topic: joinCode + "/down", accept: fresh, timeout: 6000 } });
     net.sub(joinCode + "/down");
   }
   // Señal de vida cada 4 s (el anfitrión también la usa para volver a añadirte si recarga).
   setInterval(() => {
     if (role !== "player" || !net || !net.connected()) return;
     send({ t: "hello", pid, name: myName });
-    if (st && Date.now() - lastStateAt > 15000) { setStage("p", "", "Reconectando", "No llega señal del anfitrión", "¿Sigue abierta la sala en su móvil?"); $("buzz").disabled = true; }
+    if (st && Date.now() - lastStateAt > 15000) {
+      setStage("p", "", "Reconectando", "No llega señal del anfitrión", "¿Sigue abierta la sala en su móvil?"); $("buzz").disabled = true;
+      if (st.pub) pubLost("El celular que armó la sala se desconectó.");
+    }
   }, 4000);
   function failed(msg) {
     setStage("p", "", "Sin conexión", "No se pudo entrar", msg);
@@ -1212,6 +1325,8 @@
   // Volver a la pantalla de inicio (código equivocado, cambiar nombre, cerrar la sala).
   function backToStart() {
     if (net) { net.close(); net = null; }
+    try { Ytp.stop(); } catch {}
+    document.body.classList.remove("solo"); pv.key = null; joinBroker = null; wasPub = false;
     role = null; st = null; joinCode = null; lastStateAt = 0; pressedRound = -1; seenEv = null; seenRound = null;
     ss.set("pm_player", null); ss.set("pm_host", null);
     history.replaceState(null, "", location.pathname + (testParams.length ? "?" + testParams.map((k) => `${k}=${encodeURIComponent(params.get(k))}`).join("&") : ""));
@@ -1227,6 +1342,7 @@
     $("closeConfirm").hidden = true;
     // Deja un aviso para que los jugadores sepan que la sala ya no existe.
     if (net) net.pub(code + "/down", { t: "closed" }, true);
+    advertise(true); pub = false; pubGo = false; if (searchCard) { searchCard.remove(); searchCard = null; }
     if (Spotify.connected()) Spotify.pause();
     Ytp.stop();
     endRound();
@@ -1339,7 +1455,8 @@
     btn.disabled = !canBuzz || guessing;
     if (canBuzz && !guessing) btn.classList.add("live");
 
-    if (st.phase === "lobby") setStage("p", "", `Sala ${joinCode}`, `Hola, ${myName}`, "El anfitrión abrirá la primera ronda enseguida.");
+    if (st.phase === "lobby" && st.pub) setStage("p", "", "Partida online", `Hola, ${myName}`, "Esperando más jugadores. Arranca en unos segundos…");
+    else if (st.phase === "lobby") setStage("p", "", `Sala ${joinCode}`, `Hola, ${myName}`, "El anfitrión abrirá la primera ronda enseguida.");
     else if (st.phase === "cue") {
       const c = CH[st.ch] || CH.clasico;
       setStage("p", "", `Ronda ${st.round} · ${c.name}${c.guess ? "" : " · " + kindLabel}`, "¡Preparados!", "El anfitrión está poniendo la canción…");
