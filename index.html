@@ -62,6 +62,7 @@
     <hr style="border:0;border-top:1px solid var(--line);width:100%;margin:4px 0">
     <p id="shareNote" class="okmsg" hidden>🎶 Recibí una playlist de Spotify. Crea la sala y se usa sola.</p>
     <button id="joinHost">Crear sala (soy el anfitrión)</button>
+    <button id="joinSolo" class="solobtn">🤖 Jugar solo contra la compu</button>
     <p class="tip">El anfitrión es el móvil conectado al parlante. Crea la sala y los demás entran con el código o escaneando el QR.</p>
   </section>
 
@@ -105,7 +106,7 @@
   <!-- Anfitrión -->
   <section id="host" hidden>
     <div class="wrap" style="padding:0">
-      <div class="panel">
+      <div class="panel roompanel">
         <p class="eyebrow">Código de la sala</p>
         <div class="share">
           <div id="qr" class="qr" aria-label="Código QR para entrar a la sala"></div>

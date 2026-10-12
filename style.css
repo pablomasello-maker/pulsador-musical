@@ -415,3 +415,7 @@ html.introOpen, html.introOpen body { overflow: hidden; height: 100%; overscroll
 .fx.ask .arow button { font-size: 22px; }
 .fx.ask .at { font-size: 38px; }
 .fx.ask, .fx.ask * { box-sizing: border-box; }
+/* Contra la compu */
+.solobtn { background: linear-gradient(135deg, #22c55e, #3d8bff); color: #fff; border: 0; font-weight: 800; }
+body.solo .roompanel, body.solo #modes, body.solo #modeTip { display: none !important; }
+body.solo #hOpts .opt:not(:disabled) { cursor: pointer; }

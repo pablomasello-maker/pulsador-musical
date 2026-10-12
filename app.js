@@ -106,10 +106,17 @@
       ss.set("pm_player", { code });
       startPlayer(code);
     } else {
-      startHost(null);
+      startHost(null, as === "solo" ? soloLevel : null);
     }
     audio(); keepAwake();
   }
+  // Jugar solo contra la compu: se elige la dificultad y arranca una sala propia con 3 rivales.
+  let soloLevel = null;
+  $("joinSolo").onclick = () => Fx.ask("¿Qué tan difícil?", "Jugás contra 3 rivales de la compu.", [
+    { label: "😊 Fácil", cls: "primary", fn: () => { soloLevel = "facil"; enter("solo"); } },
+    { label: "😎 Normal", cls: "primary", fn: () => { soloLevel = "normal"; enter("solo"); } },
+    { label: "🤖 Difícil", cls: "primary", fn: () => { soloLevel = "dificil"; enter("solo"); } },
+  ]).classList.add("speaker");
   $("joinPlayer").onclick = () => enter("player");
   $("joinHost").onclick = () => enter("host");
   $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") enter("player"); });
@@ -292,10 +299,42 @@
 
   const randomCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 
-  function saveHost() { ss.set("pm_host", { code, H: { ...H, online: [] }, answerIdx, penalty, music, deckSel: [...deckSel], cur: music === "deck" ? current : null, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
+  function saveHost() { ss.set("pm_host", { code, solo, H: { ...H, online: [] }, answerIdx, penalty, music, deckSel: [...deckSel], cur: music === "deck" ? current : null, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
-  function startHost(saved) {
+  // ---------- Contra la compu ----------
+  const BOTS = [["csolobot0001", "pbotrobotina", "Robotina 🤖"], ["csolobot0002", "pbotdjchip00", "DJ Chip 💿"], ["csolobot0003", "pbotbitbunny", "Bit Bunny 🐰"]];
+  const ME_CID = "csolo0000me";
+  const LEVELS = { facil: { p: 0.4, min: 6, max: 14 }, normal: { p: 0.62, min: 4, max: 10 }, dificil: { p: 0.82, min: 2.5, max: 7 } };
+  let solo = null, botRound = -1;
+  function joinSoloPlayers() {
+    onPlayerMsg({ t: "hello", cid: ME_CID, pid, name: myName });
+    for (const [cid, id, name] of BOTS) onPlayerMsg({ t: "hello", cid, pid: id, name });
+  }
+  // Cada rival contesta una vez por ronda, más rápido y mejor según la dificultad.
+  function botsPlay() {
+    if (!solo || H.phase !== "open" || !Array.isArray(H.opts) || botRound === H.round) return;
+    botRound = H.round;
+    const r = H.round, L = LEVELS[solo] || LEVELS.normal;
+    for (const [cid, id] of BOTS) {
+      const wait = (L.min + Math.random() * (L.max - L.min)) * 1000;
+      setTimeout(() => {
+        if (H.round !== r || H.phase !== "open" || !Array.isArray(H.opts) || id in H.picks || H.locked.includes(id)) return;
+        const wrong = [0, 1, 2, 3].filter((i) => i !== answerIdx && i < H.opts.length);
+        const i = Math.random() < L.p ? answerIdx : wrong[Math.floor(Math.random() * wrong.length)];
+        onPlayerMsg({ t: "pick", cid, round: r, i });
+      }, wait);
+    }
+  }
+
+  function startHost(saved, soloLvl) {
     role = "host";
+    solo = (saved && saved.solo) || soloLvl || null;
+    document.body.classList.toggle("solo", !!solo);
+    if (solo) {
+      H.mode = "normal"; ytOn = true; $("ytOn").checked = true;
+      // El video queda debajo de las opciones: mientras jugás, tenés a la vista las respuestas y no la pantalla del video.
+      $("hOpts").after($("ytBox"));
+    }
     $("start").hidden = true; $("host").hidden = false;
     if (saved) {
       Object.assign(H, saved.H || {});
@@ -318,8 +357,9 @@
     $("redirectUri").textContent = Spotify.redirectUri();
     openRoom();
     renderHost();
+    if (solo) joinSoloPlayers();
     // Sala nueva: preguntar por dónde va a sonar la música.
-    if (!saved && (!params.has("broker") || params.has("spk"))) setTimeout(askSpeaker, 1200); // en pruebas locales no molesta
+    if (!saved && !solo && (!params.has("broker") || params.has("spk"))) setTimeout(askSpeaker, 1200); // en pruebas locales no molesta
     if (SPOTIFY_UI) initSpotifyPanel(saved).then(applyShared);
     else if (music === "spotify") music = "deck";
   }
@@ -364,7 +404,10 @@
   setInterval(() => {
     if (role !== "host") return;
     let changed = false;
-    for (const [k, v] of conns) if (Date.now() - v.seen > 15000) { conns.delete(k); changed = true; }
+    for (const [k, v] of conns) {
+      if (k.startsWith("csolo")) { v.seen = Date.now(); continue; } // los de la compu y vos en modo solo
+      if (Date.now() - v.seen > 15000) { conns.delete(k); changed = true; }
+    }
     if (changed) publish(); else sendState(); // latido: mantiene viva la sala para los que entran
   }, 4000);
 
@@ -641,12 +684,14 @@
   function hostFx() {
     const e = H.evt; if (!e) return;
     const kind = mascotKind(H), who = e.pid ? nameOf(H, e.pid) : "";
-    if (e.type === "win") Fx.win(`¡${who} acertó!`, `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind);
+    const me = solo && e.pid === pid;
+    if (e.type === "win") me ? Fx.win("¡Acertaste!", `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind) : Fx.win(`¡${who} acertó!`, `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind);
+    else if (e.type === "wrong" && me) Fx.lose("¡Fallaste!", H.phase === "reveal" ? "Se acabó la ronda" : "", kind);
     else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : !auto() && cfg().snippet ? "¡Rebote! Vuelve a poner el fragmento" : "¡Rebote! Los demás tienen otra chance", kind);
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
-    else if (e.type === "final") { champion(H, null); setTimeout(askRematch, CHAMP_MS + 300); }
+    else if (e.type === "final") { champion(H, solo ? pid : null); setTimeout(askRematch, CHAMP_MS + 300); }
     else if (e.type === "year") {
       const top = (H.results || [])[0];
       if (top && top.pts) Fx.win(`Era ${H.year}`, `¡${nameOf(H, top.pid)} ${top.pts === 3 ? "lo clavó" : "estuvo cerca"}!`, "anio");
@@ -712,7 +757,8 @@
   $("openRound").onclick = async () => {
     show($("roundErr"), "");
     const roulette = H.pick === "ruleta";
-    const ids = Object.keys(CH).filter((k) => !CH[k].meta);
+    const ids = Object.keys(CH).filter((k) => !CH[k].meta && !(solo && CH[k].guess));
+    if (solo) H.mode = "normal";
     const ch = roulette ? ids[Math.floor(Math.random() * ids.length)] : H.pick;
     const c = CH[ch];
     if (music === "spotify" && link) {
@@ -787,7 +833,9 @@
   }
   function pickDeckSong() {
     // Si hay que adivinar el disco, solo canciones que lo tengan.
-    const all = deckPool().filter((t) => FIELD[H.kind] !== "album" || t.album);
+    let all = deckPool().filter((t) => FIELD[H.kind] !== "album" || t.album);
+    // Contra la compu solo van canciones que suenan dentro de Temón (si no, verías el nombre en la tarjeta).
+    if (solo && ytOn) { const v = all.filter((t) => Ytp.has(t)); if (v.length) all = v; }
     let pool = all.filter((t) => !played.has(t.id) && (!current || t.id !== current.id));
     // Primero las que tienen video guardado: suenan dentro de Temón con pausa, stop y efectos al instante.
     const withVideo = ytOn ? pool.filter((t) => Ytp.has(t)) : [];
@@ -978,12 +1026,15 @@
     $("tPlay").classList.toggle("on", !!H.playing);
     $("tReplay").lastChild.textContent = c.snippet ? `Repetir ${c.snippet} s` : "Repetir";
     $("revealBtn").hidden = !(H.phase === "open" && !c.guess);
-    renderOpts($("hOpts"), H, null, null);
+    // En modo solo el anfitrión también juega: toca las opciones en su pantalla.
+    renderOpts($("hOpts"), H, solo ? pid : null, solo ? (i) => { if (H.phase === "open") onPlayerMsg({ t: "pick", cid: ME_CID, round: H.round, i }); } : null);
+    botsPlay();
     const mk = mascotKind(H);
     setMascot($("hMascot"), H.phase === "lobby" ? "cancion" : mk, H.phase === "answering" || H.phase === "yearjudge" ? "wow" : H.phase === "reveal" && !(H.last && H.last.ok) && !(H.results && H.results.some((r) => r.pts)) ? "sad" : "happy", live);
     $("hRule").textContent = live ? (H.bomb ? "💣 Ronda bomba: acertar suma 10, fallar resta 5. " : "") + c.rule + (!auto() && c.manual ? " " + c.manual : "") : "";
     const conn = `${n} jugador${n === 1 ? "" : "es"} conectado${n === 1 ? "" : "s"}`;
-    if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn + ((GOALS[H.goal] || GOALS.free)[1] ? ` · Partida ${(GOALS[H.goal])[0].toLowerCase()}` : ""));
+    if (H.phase === "lobby" && solo) setStage("h", "", "Contra la compu", "Vos contra 3 rivales", "Elegí el desafío y tocá «Abrir siguiente ronda».");
+    else if (H.phase === "lobby") setStage("h", "", "Sala abierta", n ? "Todo listo" : "Esperando jugadores", conn + ((GOALS[H.goal] || GOALS.free)[1] ? ` · Partida ${(GOALS[H.goal])[0].toLowerCase()}` : ""));
     else if (H.phase === "final") setStage("h", "rev", "Fin de la partida", winnerOf(H) ? `¡Ganó ${nameOf(H, winnerOf(H))}!` : "¡Empate!", "Toca «Revancha» para jugar otra.");
     else if (H.phase === "cue" && current && current.vid) setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Cargando el video…", "Si hay publicidad, la ronda arranca cuando termine.");
     else if (H.phase === "cue") setStage("h", "open", `Ronda ${H.round} · ${c.name}`, "Pon esta canción", "Búscala, dale play y vuelve: arranca sola.");
@@ -996,14 +1047,14 @@
     else if (H.phase === "yearjudge") setStage("h", "ans", `Ronda ${H.round} · ${c.name}`, "¿De qué año es?", "Escribe el año correcto abajo.");
     else if (H.phase === "reveal") setStage("h", "rev", `Ronda ${H.round} · ${c.name}`, resultText(H, null), music === "manual" ? "Pon la siguiente canción y abre otra ronda." : "Abre la siguiente ronda cuando quieras.");
     // El anfitrión ve la canción mientras suena, por si tiene que juzgar.
-    renderReveal($("hReveal"), H.reveal || (current && (H.phase === "open" || H.phase === "answering") ? { title: current.title, artist: current.artist, album: current.album, year: current.year } : null));
+    renderReveal($("hReveal"), H.reveal || (!solo && current && (H.phase === "open" || H.phase === "answering") ? { title: current.title, artist: current.artist, album: current.album, year: current.year } : null));
     $("hQueue").replaceChildren(...H.queue.map((id, i) => {
       const li = document.createElement("li");
       const a = document.createElement("span"); a.textContent = nameOf(H, id);
       const b = document.createElement("span"); b.textContent = i === 0 ? "contesta" : `${i + 1}º`;
       li.append(a, b); return li;
     }));
-    renderScores($("hScores"), H, null, H.online);
+    renderScores($("hScores"), H, solo ? pid : null, H.online);
   }
 
   // ---------- Spotify (solo anfitrión) ----------
