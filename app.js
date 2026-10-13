@@ -65,6 +65,9 @@
   }
   // Temón usa YouTube; Spotify queda escondido (se puede ver con ?spotify=1 para uso privado).
   const SPOTIFY_UI = params.has("spotify");
+  // Cortina sobre el video mientras se adivina (uso privado: ?tapar=1 la activa en este celu, ?tapar=0 la quita).
+  if (params.has("tapar")) ls.set("pm_tapar", params.get("tapar") === "1");
+  const TAPAR = !!ls.get("pm_tapar");
   $("spPanel").hidden = !SPOTIFY_UI;
   if (SPOTIFY_UI && ls.get("pm_share")) $("shareNote").hidden = false;
   if (params.get("sala")) $("code").value = clean(params.get("sala"), 4).toUpperCase();
@@ -1098,6 +1101,7 @@
     const live = H.phase === "open" || H.phase === "answering";
     $("transport").hidden = !(auto() && current && H.phase !== "lobby");
     $("ytBox").hidden = !(current && current.vid && H.phase !== "lobby" && H.phase !== "final");
+    $("ytBox").classList.toggle("covered", TAPAR && (solo || pub) && H.phase !== "reveal");
     $("ytRow").hidden = music !== "deck";
     $("ytOn").disabled = !Ytp.canSearch();
     $("ytNote").textContent = Ytp.canSearch() ? "La música suena dentro de Temón y se pausa sola. Si un video no se puede ver, te muestro la canción para que la pongas tú." : "Falta la clave de YouTube: por ahora la canción la pones tú.";
@@ -1253,6 +1257,7 @@
     const live = st.vid && ["cue", "open", "answering", "reveal"].includes(st.phase);
     if (!live) { if (pv.key) { Ytp.stop(); pv.key = null; } box.hidden = true; return; }
     box.hidden = false;
+    box.classList.toggle("covered", TAPAR && st.phase !== "reveal");
     const key = st.round + "|" + st.vid;
     if (pv.key !== key) { pv.key = key; pv.playing = true; Ytp.play(box, st.vid, st.vpos || 0, () => {}).catch(() => {}); return; }
     if (!!st.playing !== pv.playing) { pv.playing = !!st.playing; if (pv.playing) Ytp.resume(); else Ytp.pause(); }
