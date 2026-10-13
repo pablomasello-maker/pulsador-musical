@@ -426,3 +426,37 @@ body.solo #hOpts .opt:not(:disabled) { cursor: pointer; }
 .ytbox.covered::before { content: ""; position: absolute; inset: 0; z-index: 2; background: radial-gradient(circle at 50% 45%, #2a1650, #0d0718 75%); }
 .ytbox.covered::after { content: "💿"; position: absolute; z-index: 3; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; font-size: 56px; line-height: 64px; text-align: center; animation: ytspin 1.6s linear infinite; }
 @keyframes ytspin { to { transform: rotate(360deg); } }
+
+/* ---- Armado de la partida: un paso por pantalla ---- */
+.wzbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; padding: 4px; border-radius: 16px; background: #15183a; border: 1px solid var(--line); }
+.wztab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; min-height: 0; border-radius: 12px; background: transparent; border: 0; box-shadow: none; color: var(--muted); font: 800 13px var(--display); }
+.wztab span { font-size: 20px; line-height: 1; filter: grayscale(.6); }
+.wztab[aria-current="true"] { background: linear-gradient(135deg, #ffb627, #ff4fa3); color: #14102a; }
+.wztab[aria-current="true"] span { filter: none; }
+.wzstep { display: flex; flex-direction: column; gap: 12px; animation: wzin .28s ease-out; }
+@keyframes wzin { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+.wznav { display: flex; gap: 10px; }
+.wznav button { flex: 1; }
+.wznav button[hidden] { display: none; }
+.swipehint { margin-left: auto; font: 700 12px var(--body); color: var(--muted); }
+
+/* Desafíos: mazo de cartas que se desliza */
+.chdeck { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 10px 11% 18px; margin: 0 -16px; scrollbar-width: none; overscroll-behavior-x: contain; }
+.chdeck::-webkit-scrollbar { display: none; }
+.chdeck .chcard, .chdeck .chcard.wide { flex: 0 0 78%; scroll-snap-align: center; display: flex; flex-direction: column; align-items: flex-start; min-height: 210px; padding: 18px 16px 16px; border-radius: 24px; filter: saturate(.7) brightness(.8); transform: scale(.92); }
+.chdeck .chcard .ic, .chdeck .chcard.wide .ic { font-size: 54px; }
+.chdeck .chcard .n { font-size: 24px; }
+.chdeck .chcard .d { font-size: 14.5px; }
+.chdeck .chcard[aria-pressed="true"] { filter: none; transform: scale(1); }
+.chdots { display: flex; justify-content: center; gap: 6px; margin-top: -6px; }
+.chdots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
+.chdots i.on { width: 20px; border-radius: 4px; background: var(--amber); }
+.kindslbl { margin: 2px 0 -4px; }
+
+/* Sala ya en juego: el QR se achica a una barra */
+.roombar { display: flex; align-items: center; gap: 10px; min-height: 0; padding: 10px 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: none; color: var(--fg); text-align: left; }
+.roombar[hidden] { display: none; }
+.roombar .rb-code { font: 800 22px var(--display); letter-spacing: .12em; color: var(--amber); }
+.roombar .rb-n { font: 700 14px var(--body); color: var(--muted); }
+.roombar .rb-qr { margin-left: auto; font: 700 13px var(--body); color: var(--fg); }
+.roompanel[hidden] { display: none; }

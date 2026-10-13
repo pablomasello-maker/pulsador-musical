@@ -107,7 +107,8 @@
   <!-- Anfitrión -->
   <section id="host" hidden>
     <div class="wrap" style="padding:0">
-      <div class="panel roompanel">
+      <button type="button" class="roombar" id="roomBar" hidden><span class="rb-code" id="roomBarCode">····</span><span class="rb-n" id="roomBarN"></span><span class="rb-qr">📱 Ver QR</span></button>
+      <div class="panel roompanel" id="roomPanel">
         <p class="eyebrow">Código de la sala</p>
         <div class="share">
           <div id="qr" class="qr" aria-label="Código QR para entrar a la sala"></div>
@@ -156,22 +157,38 @@
       </div>
       <button id="revealBtn" class="ghost" hidden>Nadie acierta: mostrar la respuesta</button>
 
-      <div class="panel" id="hRoundPanel">
-        <h3 class="step"><span>1</span>¿De dónde sale la música?</h3>
-        <div class="sources" id="sources"></div>
-        <p id="srcTip" class="tip"></p>
-        <div id="ytRow" hidden>
-          <label class="check" for="ytOn"><input id="ytOn" type="checkbox" checked> ▶️ Que suene dentro de Temón (YouTube)</label>
-          <p id="ytNote" class="tip"></p>
+      <div class="panel wizard" id="hRoundPanel">
+        <nav class="wzbar" id="wzBar" aria-label="Armar la partida">
+          <button type="button" class="wztab" data-step="0"><span>🎵</span>Música</button>
+          <button type="button" class="wztab" data-step="1"><span>🎮</span>Modo</button>
+          <button type="button" class="wztab" data-step="2"><span>🃏</span>Desafío</button>
+        </nav>
+        <div class="wzstep" data-step="0">
+          <h3 class="step"><span>1</span>¿De dónde sale la música?</h3>
+          <div class="sources" id="sources"></div>
+          <p id="srcTip" class="tip"></p>
+          <div id="ytRow" hidden>
+            <label class="check" for="ytOn"><input id="ytOn" type="checkbox" checked> ▶️ Que suene dentro de Temón (YouTube)</label>
+            <p id="ytNote" class="tip"></p>
+          </div>
         </div>
-        <h3 class="step"><span>2</span>Modo de juego</h3>
-        <div class="modes" id="modes"></div>
-        <p id="modeTip" class="tip" hidden></p>
-        <h3 class="step"><span>3</span>Elige el desafío</h3>
-        <div class="chcards" id="chCards"></div>
-        <div class="chdetail" id="chDetail"><span class="ic" id="chDetailIc"></span><div><p class="n" id="chDetailN"></p><p class="d" id="chDetailD"></p></div></div>
-        <h3 class="step"><span>4</span>¿Qué hay que adivinar?</h3>
-        <div class="kinds" id="kinds"></div>
+        <div class="wzstep" data-step="1">
+          <h3 class="step"><span>2</span>Modo de juego</h3>
+          <div class="modes" id="modes"></div>
+          <p id="modeTip" class="tip" hidden></p>
+        </div>
+        <div class="wzstep" data-step="2">
+          <h3 class="step"><span>3</span>Elegí el desafío <small class="swipehint">deslizá ↔</small></h3>
+          <div class="chdeck" id="chCards"></div>
+          <div class="chdots" id="chDots" aria-hidden="true"></div>
+          <div class="chdetail" id="chDetail"><span class="ic" id="chDetailIc"></span><div><p class="n" id="chDetailN"></p><p class="d" id="chDetailD"></p></div></div>
+          <p class="eyebrow kindslbl">¿Qué hay que adivinar?</p>
+          <div class="kinds" id="kinds"></div>
+        </div>
+        <div class="wznav">
+          <button type="button" id="wzBack" class="ghost">← Atrás</button>
+          <button type="button" id="wzNext" class="primary">Siguiente →</button>
+        </div>
         <button id="openRound" class="primary go">Abrir ronda</button>
         <p id="manualTip" class="tip">Pon la canción en YouTube Music (o donde quieras) y pulsa “Abrir ronda”. Cuando alguien pulse sonará una bocina: pausa la música y que conteste en voz alta. En modo manual los cortes los haces tú: un pitido doble te avisa cuándo parar.</p>
         <p id="deckTip" class="tip" hidden>Al abrir la ronda te muestro qué canción poner. La buscas, le das play y vuelves a Temón: la ronda arranca sola. Cuando alguien pulse, pausa la música.</p>

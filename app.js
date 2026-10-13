@@ -630,9 +630,62 @@
     const badges = el("span", "bdg");
     for (const t of c.badges || []) badges.append(el("span", null, t));
     b.append(el("span", "ic", c.ic), el("span", "n", c.name), el("span", "d", c.tag), badges, el("span", "check", "✓"));
-    b.onclick = () => { H.pick = id; saveHost(); renderHost(); b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); };
+    b.onclick = () => { pickCh(id); b.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" }); };
     $("chCards").appendChild(b);
+    $("chDots").appendChild(el("i"));
   }
+  function pickCh(id) {
+    if (H.pick === id) return;
+    H.pick = id; saveHost(); renderHost();
+    const b = $("chCards").querySelector(`[data-ch="${id}"]`);
+    if (b) { b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); }
+  }
+  // Los desafíos son un mazo de cartas: deslizás y la carta del centro queda elegida.
+  let chScrollT = null, chTouch = false, chAutoUntil = 0;
+  $("chCards").addEventListener("touchstart", () => { chTouch = true; }, { passive: true });
+  addEventListener("touchend", () => { chTouch = false; }, { passive: true });
+  $("chCards").addEventListener("scroll", () => {
+    clearTimeout(chScrollT);
+    chScrollT = setTimeout(() => {
+      chScrollT = null;
+      if (Date.now() < chAutoUntil) return;
+      const box = $("chCards"), r = box.getBoundingClientRect(), mid = r.left + r.width / 2;
+      let best = null, bd = Infinity;
+      for (const b of box.children) { const c = b.getBoundingClientRect(), d = Math.abs(c.left + c.width / 2 - mid); if (d < bd) { bd = d; best = b; } }
+      if (best) pickCh(best.dataset.ch);
+    }, 120);
+  }, { passive: true });
+  function centerCh(smooth) {
+    const box = $("chCards"), b = box.querySelector(`[data-ch="${H.pick}"]`);
+    if (!b || !box.clientWidth) return;
+    const r = box.getBoundingClientRect(), c = b.getBoundingClientRect();
+    const left = Math.max(0, Math.min(box.scrollWidth - box.clientWidth, box.scrollLeft + c.left + c.width / 2 - r.left - r.width / 2));
+    if (Math.abs(box.scrollLeft - left) < 4) return;
+    chAutoUntil = Date.now() + (smooth ? 700 : 250);
+    box.scrollTo({ left: b.offsetLeft + b.offsetWidth / 2 - box.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
+  }
+
+  // ---------- Armar la partida: un paso por pantalla ----------
+  let wzStep = 0, wzPhase = null, roomOpen = false;
+  const wzSteps = () => (solo ? [0, 2] : [0, 1, 2]);
+  function goStep(n) {
+    wzStep = n; renderWizard();
+    if (n === 2) requestAnimationFrame(() => centerCh(false));
+    const top = $("hRoundPanel").getBoundingClientRect().top;
+    if (top < 0 || top > innerHeight * 0.5) $("hRoundPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function renderWizard() {
+    const steps = wzSteps(), i = Math.max(0, steps.indexOf(wzStep)), last = i === steps.length - 1;
+    for (const d of document.querySelectorAll(".wzstep")) d.hidden = Number(d.dataset.step) !== wzStep;
+    for (const t of $("wzBar").children) { t.setAttribute("aria-current", String(Number(t.dataset.step) === wzStep)); t.hidden = !steps.includes(Number(t.dataset.step)); }
+    $("wzBack").hidden = i === 0;
+    $("wzNext").hidden = last;
+    $("openRound").hidden = !last && H.round === 0;
+  }
+  for (const t of $("wzBar").children) t.onclick = () => goStep(Number(t.dataset.step));
+  $("wzBack").onclick = () => { const st = wzSteps(); goStep(st[Math.max(0, st.indexOf(wzStep) - 1)]); };
+  $("wzNext").onclick = () => { const st = wzSteps(); goStep(st[Math.min(st.length - 1, st.indexOf(wzStep) + 1)]); };
+  $("roomBar").onclick = () => { roomOpen = !roomOpen; renderHost(); };
 
   let snippetTimer = null;
   let deadline = null; // reloj del anfitrión mientras corre la cuenta atrás; a los jugadores se les manda lo que queda
@@ -1069,6 +1122,7 @@
     const c = cfg();
     for (const b of kindsEl.children) b.setAttribute("aria-pressed", String(b.dataset.kind === H.kind));
     for (const b of $("chCards").children) b.setAttribute("aria-pressed", String(b.dataset.ch === H.pick));
+    [...$("chDots").children].forEach((d, i) => d.classList.toggle("on", $("chCards").children[i].dataset.ch === H.pick));
     const pk = CH[H.pick] || CH.clasico;
     $("chDetail").style.setProperty("--c", pk.color);
     $("chDetailIc").textContent = pk.ic; $("chDetailN").textContent = pk.name; $("chDetailD").textContent = pk.rule;
@@ -1095,6 +1149,20 @@
     renderResults($("hResults"), $("hResList"), $("hResTitle"), H, null);
     renderPodium($("hFinal"), H, null);
     $("hRoundPanel").hidden = H.phase === "final";
+    // Ya empezada la partida: el QR se achica a una barra y el armado salta directo a los desafíos.
+    const playing = H.round > 0;
+    $("roomBar").hidden = !playing; $("roomPanel").hidden = playing && !roomOpen;
+    $("roomBarCode").textContent = code || "····"; $("roomBarN").textContent = `👥 ${n}`;
+    $("roomBar").lastChild.textContent = roomOpen ? "Ocultar QR" : "📱 Ver QR";
+    if (wzPhase !== H.phase) {
+      const prev = wzPhase; wzPhase = H.phase;
+      if ((prev === "lobby" || prev === null) && playing) { wzStep = 2; requestAnimationFrame(() => centerCh(false)); }
+      // Arranca la canción: se sube a la parte de arriba para ver la ronda sin buscarla.
+      if (prev !== null && (H.phase === "open" || H.phase === "cue") && prev !== H.phase && prev !== "answering") scrollTo({ top: 0, behavior: "smooth" });
+    }
+    renderWizard();
+    // Si el mazo quedó corrido (por ejemplo, tras esconderse), vuelve a centrar la carta elegida.
+    if (wzStep === 2 && !chTouch && !chScrollT) requestAnimationFrame(() => centerCh(false));
     for (const b of $("goals").children) b.setAttribute("aria-pressed", String(b.dataset.goal === (H.goal || "free")));
     $("openRound").textContent = H.round === 0 ? "Abrir primera ronda" : (H.phase === "open" || H.phase === "answering") ? "Otra canción" : "Abrir siguiente ronda";
     $("manualTip").hidden = music !== "manual"; $("spTip").hidden = music !== "spotify"; $("deckTip").hidden = music !== "deck";
