@@ -141,6 +141,7 @@
       if (id === mine) li.className = "me";
       const pos = document.createElement("span"); pos.className = "pos"; pos.textContent = i + 1;
       const nm = document.createElement("span"); nm.className = "name"; nm.textContent = nameOf(st, id) + (id === mine ? " (tú)" : "") + (online.includes(id) ? "" : " · desconectado");
+      if (Bots.has(id)) { const av = document.createElement("span"); av.className = "sav"; av.innerHTML = Bots.svg(id, "idle"); nm.prepend(av); }
       const pt = document.createElement("span"); pt.className = "pts"; pt.textContent = st.scores[id];
       li.append(pos, nm, pt); return li;
     }));
@@ -307,7 +308,7 @@
   function saveHost() { ss.set("pm_host", { code, solo, pub, pubGo, H: { ...H, online: [] }, answerIdx, penalty, music, deckSel: [...deckSel], cur: music === "deck" ? current : null, link, seen: seen.slice(-200), playlist: $("spPlaylist").value || ss.get("pm_host")?.playlist || "", played: [...played].slice(-500) }); }
 
   // ---------- Contra la compu ----------
-  const BOTS = [["csolobot0001", "pbotrobotina", "Robotina 🤖"], ["csolobot0002", "pbotdjchip00", "DJ Chip 💿"], ["csolobot0003", "pbotbitbunny", "Bit Bunny 🐰"]];
+  const BOTS = [["csolobot0001", "pbotrobotina", "Guitarrita 🎸"], ["csolobot0002", "pbotdjchip00", "DJ Chip 💿"], ["csolobot0003", "pbotbitbunny", "Bombito 🥁"]];
   const ME_CID = "csolo0000me";
   const LEVELS = { facil: { p: 0.4, min: 6, max: 14 }, normal: { p: 0.62, min: 4, max: 10 }, dificil: { p: 0.82, min: 2.5, max: 7 } };
   let solo = null, botRound = -1;
@@ -681,7 +682,7 @@
     if (solo) {
       $("vsTitle").textContent = "Contra quién jugás";
       const rivals = el("div", "vsr");
-      for (const [, , name] of BOTS) rivals.append(face(name, LVL_TXT[solo] || ""));
+      for (const [, id, name] of BOTS) { const f = face(name, LVL_TXT[solo] || ""); f.classList.add("bot"); f.firstChild.innerHTML = Bots.svg(id, "happy"); rivals.append(f); }
       box.append(me, el("div", "vsx", "VS"), rivals);
       $("vsTip").textContent = "Gana el primero que llega a 30 puntos.";
     } else {
@@ -694,6 +695,29 @@
       if (!H.online.length) list.append(el("p", "vswait", "Esperando jugadores…"));
       box.append(top, list);
       $("vsTip").textContent = H.online.length ? `${H.online.length} listo${H.online.length > 1 ? "s" : ""}. Cuando estén todos, ¡PLAY!` : "Podés arrancar igual y se suman en la próxima canción.";
+    }
+  }
+  // Contra la compu: los rivales aparecen debajo de la ronda y reaccionan a lo que pasa.
+  const botKeys = {};
+  function renderBots() {
+    const row = $("botRow"), on = !!solo && H.phase !== "lobby" && H.phase !== "final";
+    row.hidden = !on; if (!on) return;
+    if (row.children.length !== BOTS.length) row.replaceChildren(...BOTS.map(([, id]) => { const d = el("div", "botc"); d.dataset.id = id; const inf = el("div", "binfo"); inf.append(el("span", "bnm"), el("span", "bpt")); d.append(el("span", "bub"), el("div", "bsv"), inf); return d; }));
+    const live = H.phase === "open" || H.phase === "answering" || H.phase === "cue";
+    const best = Math.max(...Object.values(H.scores));
+    for (const d of row.children) {
+      const id = d.dataset.id, pick = H.picks ? H.picks[id] : undefined;
+      const won = H.last && H.last.ok && H.last.pid === id;
+      const mood = won || (live && pick !== undefined && pick === answerIdx) ? "happy"
+        : pick !== undefined && pick !== answerIdx ? "sad" : live ? "think" : "idle";
+      const bub = { happy: "¡Mía!", sad: ["Uy…", "¡Nooo!", "Casi…"][H.round % 3], think: "🤔", idle: "" }[mood];
+      if (botKeys[id] !== mood) {
+        botKeys[id] = mood;
+        d.querySelector(".bsv").innerHTML = Bots.svg(id, mood);
+        const b = d.querySelector(".bub"); b.textContent = bub; b.hidden = !bub; b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop");
+      }
+      d.querySelector(".bnm").textContent = nameOf(H, id).replace(/\s*\p{Extended_Pictographic}.*/u, "");
+      d.querySelector(".bpt").textContent = `${H.scores[id] || 0} pts` + (H.scores[id] && H.scores[id] === best ? " 👑" : "");
     }
   }
   // Última ventana: resumen corto y el botón PLAY solo.
@@ -856,6 +880,8 @@
     H.ev = (H.ev || 0) + 1; H.evt = { type, pid: pid || null, pts: pts || 0 };
     hostFx();
   }
+  // Cuando acierta o falla un rival de la compu, el cartel muestra al personaje en vez de la mascota.
+  function botFace(id, mood) { const bm = document.querySelector(".fx.banner .bm"); if (bm) bm.innerHTML = Bots.svg(id, mood); }
   function hostFx() {
     const e = H.evt; if (!e) return;
     const kind = mascotKind(H), who = e.pid ? nameOf(H, e.pid) : "";
@@ -863,6 +889,7 @@
     if (e.type === "win") me ? Fx.win("¡Acertaste!", `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind) : Fx.win(`¡${who} acertó!`, `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind);
     else if (e.type === "wrong" && me) Fx.lose("¡Fallaste!", H.phase === "reveal" ? "Se acabó la ronda" : "", kind);
     else if (e.type === "wrong") Fx.lose(`¡${who} falló!`, H.phase === "reveal" ? "Se acabó la ronda" : !auto() && cfg().snippet ? "¡Rebote! Vuelve a poner el fragmento" : "¡Rebote! Los demás tienen otra chance", kind);
+    if ((e.type === "win" || e.type === "wrong") && Bots.has(e.pid)) botFace(e.pid, e.type === "win" ? "happy" : "sad");
     else if (e.type === "timeout") Fx.lose("¡Se acabó el tiempo!", "", kind);
     else if (e.type === "nobody") Fx.lose("Nadie acertó", "", kind);
     else if (e.type === "new") Fx.info("¡Nuevo juego!", "Todos arrancan de cero", "cancion");
@@ -1205,6 +1232,7 @@
       if (prev !== null && (H.phase === "open" || H.phase === "cue") && prev !== H.phase && prev !== "answering") scrollTo({ top: 0, behavior: "smooth" });
     }
     renderWizard();
+    renderBots();
     // Si el mazo quedó corrido (por ejemplo, tras esconderse), vuelve a centrar la carta elegida.
     if (wzStep === 2 && !chTouch && !chScrollT) requestAnimationFrame(() => centerCh(false));
     for (const b of $("goals").children) b.setAttribute("aria-pressed", String(b.dataset.goal === (H.goal || "free")));
@@ -1487,7 +1515,7 @@
     const locked = Array.isArray(st.locked) ? st.locked : [];
     if (e.type === "win") {
       if (e.pid === pid) { Fx.win("¡Acertaste!", `+${e.pts} punto${e.pts === 1 ? "" : "s"}`, kind); vibrate([60, 40, 60, 40, 200]); }
-      else { Fx.lose(`¡Te ganó ${who}!`, `Sumó ${e.pts}`, kind); vibrate(300); }
+      else { Fx.lose(`¡Te ganó ${who}!`, `Sumó ${e.pts}`, kind); vibrate(300); if (Bots.has(e.pid)) botFace(e.pid, "happy"); }
     } else if (e.type === "wrong") {
       if (e.pid === pid) { Fx.lose("¡Fallaste!", e.pts ? `${e.pts} punto${e.pts === -1 ? "" : "s"}` : "", kind); vibrate(400); }
       else if (st.phase !== "reveal" && !locked.includes(pid)) { Fx.info("¡Rebote!", `${who} falló. ¡Tienes otra chance!`, kind); vibrate([80, 60, 80]); }

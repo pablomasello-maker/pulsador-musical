@@ -506,3 +506,71 @@ html, body { overflow-x: clip; }
 .wzstep.ready .playbtn { width: 100%; margin-top: 18px; padding: 30px 22px; font-size: 56px; }
 .ver { text-align: center; font-size: 11px; color: var(--muted); opacity: .6; margin: 4px 0 0; }
 #start[hidden] + .ver { display: none; }
+
+/* ---- Rivales de la compu: personajes musicales animados ---- */
+.botsvg { width: 100%; height: 100%; display: block; overflow: visible; }
+.botsvg * { transform-box: fill-box; }
+.botsvg .b-head { transform-origin: 50% 100%; animation: bbob 2.4s ease-in-out infinite; }
+.botsvg .b-eyes { transform-origin: center; animation: bblink 4s infinite; }
+.botsvg .b-ant { transform-origin: 50% 100%; animation: bsway 2.6s ease-in-out infinite; }
+.botsvg .b-blink { animation: bglow 1.2s steps(2) infinite; }
+.botsvg .b-armL { transform-origin: 100% 100%; } .botsvg .b-armR { transform-origin: 0% 100%; }
+.botsvg .b-disc { transform-origin: center; animation: bspin 6s linear infinite; }
+.botsvg .b-note { animation: bnote 2.2s ease-in-out infinite; }
+.botsvg .b-earL { transform-origin: 100% 100%; animation: bstickL 2.8s ease-in-out infinite; }
+.botsvg .b-earR { transform-origin: 0% 100%; animation: bstickR 2.8s ease-in-out infinite; }
+.botsvg .b-look { animation: blook 1.6s ease-in-out infinite; }
+/* Festeja: salta, agita los brazos, el disco gira rápido y el tambor redobla. */
+.botsvg.m-happy .b-head { animation: bjump .55s cubic-bezier(.3,1.6,.5,1) infinite alternate; }
+.botsvg.m-happy .b-armL { animation: bwaveL .3s ease-in-out infinite alternate; }
+.botsvg.m-happy .b-armR { animation: bwaveR .3s ease-in-out infinite alternate; }
+.botsvg.m-happy .b-disc { animation-duration: .7s; }
+.botsvg.m-happy .b-earL { animation: bdrumL .22s ease-in-out infinite alternate; }
+.botsvg.m-happy .b-earR { animation: bdrumR .22s ease-in-out infinite alternate .11s; }
+.botsvg.m-happy .b-strings { animation: bstr .12s linear infinite; }
+/* Se lamenta: se achica y se le cae una lágrima. */
+.botsvg.m-sad .b-head { animation: bsad 1.8s ease-in-out infinite; }
+.botsvg.m-sad .b-ant, .botsvg.m-sad .b-earL, .botsvg.m-sad .b-earR { animation: none; transform: rotate(14deg); }
+.botsvg.m-sad .b-disc { animation-duration: 20s; }
+.botsvg .b-tear { animation: btear 1.4s ease-in infinite; }
+/* Piensa: se balancea de un lado al otro. */
+.botsvg.m-think .b-head { animation: bthink 1.4s ease-in-out infinite; }
+@keyframes bbob { 50% { transform: translateY(-3px) scaleY(1.02); } }
+@keyframes bblink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes bsway { 50% { transform: rotate(-8deg); } }
+@keyframes bglow { 50% { opacity: .35; } }
+@keyframes bspin { to { transform: rotate(360deg); } }
+@keyframes bnote { 0% { transform: translate(0, 6px); opacity: 0; } 40% { opacity: 1; } 100% { transform: translate(6px, -10px); opacity: 0; } }
+@keyframes bstickL { 50% { transform: rotate(-10deg); } }
+@keyframes bstickR { 50% { transform: rotate(10deg); } }
+@keyframes blook { 50% { transform: translateX(-3px); } }
+@keyframes bjump { from { transform: translateY(0) scale(1, .96); } to { transform: translateY(-10px) scale(1, 1.04); } }
+@keyframes bwaveL { from { transform: rotate(10deg); } to { transform: rotate(-35deg); } }
+@keyframes bwaveR { from { transform: rotate(-10deg); } to { transform: rotate(35deg); } }
+@keyframes bdrumL { from { transform: rotate(-30deg); } to { transform: rotate(20deg); } }
+@keyframes bdrumR { from { transform: rotate(30deg); } to { transform: rotate(-20deg); } }
+@keyframes bstr { 50% { transform: translateX(.8px); } }
+@keyframes bsad { 50% { transform: translateY(3px) scale(.97, .94); } }
+@keyframes btear { from { transform: translateY(0); opacity: 1; } to { transform: translateY(14px); opacity: 0; } }
+@keyframes bthink { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { .botsvg * { animation: none !important; } }
+
+.botrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.botc { position: relative; display: flex; flex-direction: column; align-items: center; padding: 18px 4px 8px; border-radius: 18px; background: #15183a; border: 1px solid var(--line); }
+.botc .bsv { width: 72px; height: 76px; }
+.botc .bnm { font: 800 13px var(--display); }
+.botc .bpt { font: 700 12px var(--body); color: var(--muted); }
+.botc .bub { position: absolute; top: -12px; padding: 3px 10px; border-radius: 999px; background: #fff8ec; color: #14102a; font: 800 13px var(--display); box-shadow: 0 3px 0 #0006; white-space: nowrap; }
+.botc .bub[hidden] { display: none; }
+.botc .bub.pop { animation: tpop .4s cubic-bezier(.2,1.6,.4,1) both; }
+.vsp.bot .vsa { width: 76px; height: 80px; }
+.scores .sav { display: inline-block; width: 22px; height: 24px; vertical-align: -6px; margin-right: 6px; }
+/* Compacto para que las opciones sigan a la vista sin bajar. */
+.botrow { gap: 6px; margin: 2px 0 4px; }
+.botc { flex-direction: row; gap: 4px; padding: 6px 6px; border-radius: 14px; justify-content: flex-start; }
+.botc .bsv { width: 40px; height: 42px; flex: none; }
+.botc .binfo { display: flex; flex-direction: column; min-width: 0; }
+.botc .bnm { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.botc .bpt { font-size: 11px; }
+.botc .bub { top: -10px; right: 4px; padding: 1px 7px; font-size: 11px; }
+body.solo #host .stage .mascot { display: none; }
