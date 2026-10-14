@@ -460,3 +460,42 @@ body.solo #hOpts .opt:not(:disabled) { cursor: pointer; }
 .roombar .rb-n { font: 700 14px var(--body); color: var(--muted); }
 .roombar .rb-qr { margin-left: auto; font: 700 13px var(--body); color: var(--fg); }
 .roompanel[hidden] { display: none; }
+
+/* Sala nueva: el armado ocupa toda la pantalla, una ventana por paso */
+body.sheeton { overflow: hidden; }
+#hRoundPanel.sheet { position: fixed; inset: 0; z-index: 80; margin: 0; border: 0; border-radius: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) max(16px, calc((100vw - 520px) / 2)) calc(16px + env(safe-area-inset-bottom, 0px));
+  background: radial-gradient(120% 60% at 50% 0%, #2a1a5e, var(--bg) 70%); }
+#hRoundPanel.sheet .chdeck { margin: 0 calc(-1 * max(16px, calc((100vw - 520px) / 2))); }
+#hRoundPanel.sheet #manualTip, #hRoundPanel.sheet #deckTip, #hRoundPanel.sheet #spTip { display: none; }
+#hRoundPanel.sheet .wzstep { flex: 1; }
+#hRoundPanel.sheet .wznav { position: sticky; bottom: 0; padding-top: 8px; }
+
+/* Contra quién jugás */
+.vs { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.vsr { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }
+.vsp { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 96px; padding: 12px 6px 10px; border-radius: 20px; background: #15183a; border: 2px solid var(--line); animation: vsin .45s cubic-bezier(.2,1.6,.4,1) both; }
+.vsr .vsp:nth-child(2) { animation-delay: .12s; } .vsr .vsp:nth-child(3) { animation-delay: .24s; } .vsr .vsp:nth-child(4) { animation-delay: .36s; }
+.vsp.me { width: 130px; background: linear-gradient(150deg, #ffb627, #ff4fa3); border-color: #fff; color: #14102a; }
+.vsa { font-size: 40px; line-height: 1.1; }
+.vsp.me .vsa { font-size: 54px; }
+.vsn { font: 800 15px var(--display); text-align: center; overflow-wrap: anywhere; }
+.vss { font: 700 12px var(--body); color: var(--muted); text-align: center; }
+.vsp.me .vss { color: #14102a; }
+.vsx { font: 400 46px/1 "Lilita One", var(--display); color: #ffd23f; -webkit-text-stroke: 2px #14102a; paint-order: stroke fill; animation: vsx 1.2s ease-in-out infinite; }
+.vsroom { display: flex; gap: 14px; align-items: center; width: 100%; padding: 12px; border-radius: 18px; background: #15183a; border: 1px solid var(--line); }
+.vsqr { width: 120px; flex: none; background: #fff; padding: 8px; border-radius: 12px; }
+.vsqr svg { display: block; width: 100%; height: auto; }
+.vscode { font: 800 34px var(--display); letter-spacing: .14em; color: var(--amber); margin: 0; }
+.vswait { color: var(--muted); font-weight: 700; margin: 6px 0; }
+.playbtn { margin-top: 6px; font: 400 44px/1 "Lilita One", var(--display); letter-spacing: .04em; padding: 22px; border-radius: 26px; color: #14102a; border: 0;
+  background: linear-gradient(135deg, #3ddc97, #22c3a6); box-shadow: 0 8px 0 #12775f, 0 18px 40px rgba(61,220,151,.4); animation: gopulse2 1.6s ease-in-out infinite; }
+.playbtn:active { transform: translateY(5px); box-shadow: 0 3px 0 #12775f; }
+@keyframes gopulse2 { 50% { transform: scale(1.04); } }
+@keyframes vsin { from { opacity: 0; transform: translateY(20px) scale(.8); } }
+@keyframes vsx { 50% { transform: scale(1.15) rotate(-4deg); } }
+@media (prefers-reduced-motion: reduce) { .playbtn, .vsx, .vsp { animation: none !important; } }
+#hRoundPanel.sheet .wznav { z-index: 3; }
+#hRoundPanel.sheet .wztab[data-step="2"] { order: -1; }
+#hRoundPanel.sheet .step > span { display: none; }
+html, body { overflow-x: clip; }

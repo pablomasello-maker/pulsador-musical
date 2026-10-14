@@ -432,6 +432,7 @@
     openRoom();
     renderHost();
     if (solo) joinSoloPlayers();
+    if (!saved && !pub) openSheet();
     if (pub && pubGo) addBots(BOTS.filter(([, id]) => id in H.scores).length);
     // Sala nueva: preguntar por dónde va a sonar la música.
     if (!saved && !solo && (!params.has("broker") || params.has("spk"))) setTimeout(askSpeaker, 1200); // en pruebas locales no molesta
@@ -662,15 +663,44 @@
     const left = Math.max(0, Math.min(box.scrollWidth - box.clientWidth, box.scrollLeft + c.left + c.width / 2 - r.left - r.width / 2));
     if (Math.abs(box.scrollLeft - left) < 4) return;
     chAutoUntil = Date.now() + (smooth ? 700 : 250);
-    box.scrollTo({ left: b.offsetLeft + b.offsetWidth / 2 - box.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
+    box.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
   }
 
   // ---------- Armar la partida: un paso por pantalla ----------
-  let wzStep = 0, wzPhase = null, roomOpen = false;
-  const wzSteps = () => (solo ? [0, 2] : [0, 1, 2]);
+  // Sala nueva: el armado se abre a pantalla completa, una ventana por paso (desafío, mazos, modo, rivales y PLAY).
+  let wzStep = 0, wzPhase = null, roomOpen = false, sheet = false;
+  const wzSteps = () => (sheet ? (solo ? [2, 0, 3] : [2, 0, 1, 3]) : solo ? [0, 2] : [0, 1, 2]);
+  function openSheet() { sheet = true; wzStep = 2; document.body.classList.add("sheeton"); renderHost(); requestAnimationFrame(() => centerCh(false)); }
+  function closeSheet() { sheet = false; document.body.classList.remove("sheeton"); renderHost(); }
+  const LVL_TXT = { facil: "Fácil 😊", normal: "Normal 😎", dificil: "Difícil 🤖" };
+  function renderVs() {
+    const box = $("vsBox"); box.replaceChildren();
+    const face = (name, sub, me) => { const d = el("div", "vsp" + (me ? " me" : "")); d.append(el("span", "vsa", [...name].find((ch) => /\p{Extended_Pictographic}/u.test(ch)) || name[0].toUpperCase()), el("span", "vsn", name.replace(/\s*\p{Extended_Pictographic}.*/u, "")), el("span", "vss", sub || "")); return d; };
+    const me = face(myName + " 🎧", "Vos", true);
+    if (solo) {
+      $("vsTitle").textContent = "Contra quién jugás";
+      const rivals = el("div", "vsr");
+      for (const [, , name] of BOTS) rivals.append(face(name, LVL_TXT[solo] || ""));
+      box.append(me, el("div", "vsx", "VS"), rivals);
+      $("vsTip").textContent = "Gana el primero que llega a 30 puntos.";
+      $("playBtn").disabled = false;
+    } else {
+      $("vsTitle").textContent = "¿Quiénes juegan?";
+      const q = el("div", "vsqr"); q.innerHTML = $("qr").innerHTML;
+      const info = el("div", "vsinfo"); info.append(el("p", "vscode", code || "····"), el("p", "vss", "Escaneen el QR o entren con este código"));
+      const top = el("div", "vsroom"); top.append(q, info);
+      const list = el("div", "vsr");
+      for (const id of H.online) list.append(face(nameOf(H, id), "Listo ✓"));
+      if (!H.online.length) list.append(el("p", "vswait", "Esperando jugadores…"));
+      box.append(top, list);
+      $("vsTip").textContent = H.online.length ? `${H.online.length} listo${H.online.length > 1 ? "s" : ""}. Cuando estén todos, ¡PLAY!` : "Podés arrancar igual y se suman en la próxima canción.";
+    }
+  }
+  $("playBtn").onclick = () => { closeSheet(); Fx.info("¡A jugar!", "Primera ronda", "cancion"); setTimeout(() => $("openRound").click(), 400); };
   function goStep(n) {
     wzStep = n; renderWizard();
     if (n === 2) requestAnimationFrame(() => centerCh(false));
+    if (sheet) { $("hRoundPanel").scrollTop = 0; return; }
     const top = $("hRoundPanel").getBoundingClientRect().top;
     if (top < 0 || top > innerHeight * 0.5) $("hRoundPanel").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -678,12 +708,15 @@
     const steps = wzSteps(), i = Math.max(0, steps.indexOf(wzStep)), last = i === steps.length - 1;
     for (const d of document.querySelectorAll(".wzstep")) d.hidden = Number(d.dataset.step) !== wzStep;
     for (const t of $("wzBar").children) { t.setAttribute("aria-current", String(Number(t.dataset.step) === wzStep)); t.hidden = !steps.includes(Number(t.dataset.step)); }
-    $("wzBack").hidden = i === 0;
+    $("wzBack").hidden = i === 0 && !sheet;
+    $("wzBack").textContent = i === 0 ? "✕ Salir" : "← Atrás";
     $("wzNext").hidden = last;
-    $("openRound").hidden = !last && H.round === 0;
+    $("openRound").hidden = sheet || (!last && H.round === 0);
+    $("hRoundPanel").classList.toggle("sheet", sheet);
+    if (sheet && wzStep === 3) renderVs();
   }
   for (const t of $("wzBar").children) t.onclick = () => goStep(Number(t.dataset.step));
-  $("wzBack").onclick = () => { const st = wzSteps(); goStep(st[Math.max(0, st.indexOf(wzStep) - 1)]); };
+  $("wzBack").onclick = () => { const st = wzSteps(); if (sheet && st.indexOf(wzStep) <= 0) { $("closeYes").click(); return; } goStep(st[Math.max(0, st.indexOf(wzStep) - 1)]); };
   $("wzNext").onclick = () => { const st = wzSteps(); goStep(st[Math.min(st.length - 1, st.indexOf(wzStep) + 1)]); };
   $("roomBar").onclick = () => { roomOpen = !roomOpen; renderHost(); };
 
@@ -1156,6 +1189,7 @@
     $("roomBar").lastChild.textContent = roomOpen ? "Ocultar QR" : "📱 Ver QR";
     if (wzPhase !== H.phase) {
       const prev = wzPhase; wzPhase = H.phase;
+      if (sheet && H.round > 0) { sheet = false; document.body.classList.remove("sheeton"); }
       if ((prev === "lobby" || prev === null) && playing) { wzStep = 2; requestAnimationFrame(() => centerCh(false)); }
       // Arranca la canción: se sube a la parte de arriba para ver la ronda sin buscarla.
       if (prev !== null && (H.phase === "open" || H.phase === "cue") && prev !== H.phase && prev !== "answering") scrollTo({ top: 0, behavior: "smooth" });
@@ -1399,7 +1433,7 @@
   function backToStart() {
     if (net) { net.close(); net = null; }
     try { Ytp.stop(); } catch {}
-    document.body.classList.remove("solo"); pv.key = null; joinBroker = null; wasPub = false;
+    document.body.classList.remove("solo", "sheeton"); sheet = false; pv.key = null; joinBroker = null; wasPub = false;
     role = null; st = null; joinCode = null; lastStateAt = 0; pressedRound = -1; seenEv = null; seenRound = null;
     ss.set("pm_player", null); ss.set("pm_host", null);
     history.replaceState(null, "", location.pathname + (testParams.length ? "?" + testParams.map((k) => `${k}=${encodeURIComponent(params.get(k))}`).join("&") : ""));
