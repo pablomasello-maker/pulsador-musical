@@ -504,3 +504,5 @@ html, body { overflow-x: clip; }
 .readyic { font-size: 84px; line-height: 1; animation: wiggle 1.6s ease-in-out infinite; }
 .readytxt { font: 800 20px var(--display); margin: 0; }
 .wzstep.ready .playbtn { width: 100%; margin-top: 18px; padding: 30px 22px; font-size: 56px; }
+.ver { text-align: center; font-size: 11px; color: var(--muted); opacity: .6; margin: 4px 0 0; }
+#start[hidden] + .ver { display: none; }

@@ -68,6 +68,7 @@
   // Cortina sobre el video mientras se adivina (uso privado: ?tapar=1 la activa en este celu, ?tapar=0 la quita).
   if (params.has("tapar")) ls.set("pm_tapar", params.get("tapar") === "1");
   const TAPAR = !!ls.get("pm_tapar");
+  if (TAPAR) $("appVer").textContent += " · cortina activada";
   $("spPanel").hidden = !SPOTIFY_UI;
   if (SPOTIFY_UI && ls.get("pm_share")) $("shareNote").hidden = false;
   if (params.get("sala")) $("code").value = clean(params.get("sala"), 4).toUpperCase();
@@ -764,7 +765,7 @@
 
   // Pasar sola: 30 s por canción como máximo y, cuando se ve la respuesta, arranca la siguiente.
   // Si alguien acertó, la siguiente arranca casi enseguida para no enfriar la jugada.
-  const AUTO_LIMIT = 30, AUTO_WAIT = 6000, AUTO_HIT = 2500;
+  const AUTO_LIMIT = 30, AUTO_WAIT = 4000, AUTO_HIT = 2500;
   let autoNext = ls.get("pm_autonext") !== "0", nextAt = 0, nextRound = -1;
   $("autoNext").checked = autoNext;
   $("autoNext").onchange = (e) => { autoNext = e.target.checked; ls.set("pm_autonext", autoNext ? "1" : "0"); nextRound = -1; };
@@ -774,7 +775,7 @@
       const hit = !!(H.last && H.last.ok);
       if (nextRound !== H.round) { nextRound = H.round; nextAt = Date.now() + (hit ? AUTO_HIT : AUTO_WAIT); }
       const n = Math.ceil((nextAt - Date.now()) / 1000);
-      $("hNext").hidden = hit; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
+      $("hNext").hidden = true; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
       if (n <= 0 && !$("openRound").disabled) { nextAt = Infinity; $("hNext").hidden = true; $("openRound").click(); }
     } else { $("hNext").hidden = true; if (H.phase !== "reveal") nextRound = -1; }
     if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
