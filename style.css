@@ -499,3 +499,8 @@ body.sheeton { overflow: hidden; }
 #hRoundPanel.sheet .wztab[data-step="2"] { order: -1; }
 #hRoundPanel.sheet .step > span { display: none; }
 html, body { overflow-x: clip; }
+.wzstep.ready { align-items: center; justify-content: center; text-align: center; gap: 10px; }
+.readyq { font: 400 54px/1 "Lilita One", var(--display); color: #ff4fa3; -webkit-text-stroke: 2px #14102a; paint-order: stroke fill; margin: 0; animation: vsx 1.4s ease-in-out infinite; }
+.readyic { font-size: 84px; line-height: 1; animation: wiggle 1.6s ease-in-out infinite; }
+.readytxt { font: 800 20px var(--display); margin: 0; }
+.wzstep.ready .playbtn { width: 100%; margin-top: 18px; padding: 30px 22px; font-size: 56px; }

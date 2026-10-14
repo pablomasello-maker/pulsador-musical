@@ -669,7 +669,7 @@
   // ---------- Armar la partida: un paso por pantalla ----------
   // Sala nueva: el armado se abre a pantalla completa, una ventana por paso (desafío, mazos, modo, rivales y PLAY).
   let wzStep = 0, wzPhase = null, roomOpen = false, sheet = false;
-  const wzSteps = () => (sheet ? (solo ? [2, 0, 3] : [2, 0, 1, 3]) : solo ? [0, 2] : [0, 1, 2]);
+  const wzSteps = () => (sheet ? (solo ? [2, 0, 3, 4] : [2, 0, 1, 3, 4]) : solo ? [0, 2] : [0, 1, 2]);
   function openSheet() { sheet = true; wzStep = 2; document.body.classList.add("sheeton"); renderHost(); requestAnimationFrame(() => centerCh(false)); }
   function closeSheet() { sheet = false; document.body.classList.remove("sheeton"); renderHost(); }
   const LVL_TXT = { facil: "Fácil 😊", normal: "Normal 😎", dificil: "Difícil 🤖" };
@@ -683,7 +683,6 @@
       for (const [, , name] of BOTS) rivals.append(face(name, LVL_TXT[solo] || ""));
       box.append(me, el("div", "vsx", "VS"), rivals);
       $("vsTip").textContent = "Gana el primero que llega a 30 puntos.";
-      $("playBtn").disabled = false;
     } else {
       $("vsTitle").textContent = "¿Quiénes juegan?";
       const q = el("div", "vsqr"); q.innerHTML = $("qr").innerHTML;
@@ -695,6 +694,13 @@
       box.append(top, list);
       $("vsTip").textContent = H.online.length ? `${H.online.length} listo${H.online.length > 1 ? "s" : ""}. Cuando estén todos, ¡PLAY!` : "Podés arrancar igual y se suman en la próxima canción.";
     }
+  }
+  // Última ventana: resumen corto y el botón PLAY solo.
+  function renderReady() {
+    const pk = CH[H.pick] || CH.clasico, n = solo ? BOTS.length : H.online.length;
+    $("readyIc").textContent = pk.ic;
+    $("readyTxt").textContent = `${pk.name} · Adivina: ${KINDS[H.kind][0]}`;
+    $("readySub").textContent = solo ? `Vos contra ${n} rivales · A 30 puntos` : n ? `${n} jugador${n > 1 ? "es" : ""} en la sala` : "Todavía no entró nadie: pueden sumarse jugando";
   }
   $("playBtn").onclick = () => { closeSheet(); Fx.info("¡A jugar!", "Primera ronda", "cancion"); setTimeout(() => $("openRound").click(), 400); };
   function goStep(n) {
@@ -714,6 +720,7 @@
     $("openRound").hidden = sheet || (!last && H.round === 0);
     $("hRoundPanel").classList.toggle("sheet", sheet);
     if (sheet && wzStep === 3) renderVs();
+    if (sheet && wzStep === 4) renderReady();
   }
   for (const t of $("wzBar").children) t.onclick = () => goStep(Number(t.dataset.step));
   $("wzBack").onclick = () => { const st = wzSteps(); if (sheet && st.indexOf(wzStep) <= 0) { $("closeYes").click(); return; } goStep(st[Math.max(0, st.indexOf(wzStep) - 1)]); };
@@ -756,16 +763,18 @@
   function endRound() { clearClock(); stopSnippet(); }
 
   // Pasar sola: 30 s por canción como máximo y, cuando se ve la respuesta, arranca la siguiente.
-  const AUTO_LIMIT = 30, AUTO_WAIT = 7000;
+  // Si alguien acertó, la siguiente arranca casi enseguida para no enfriar la jugada.
+  const AUTO_LIMIT = 30, AUTO_WAIT = 6000, AUTO_HIT = 2500;
   let autoNext = ls.get("pm_autonext") !== "0", nextAt = 0, nextRound = -1;
   $("autoNext").checked = autoNext;
   $("autoNext").onchange = (e) => { autoNext = e.target.checked; ls.set("pm_autonext", autoNext ? "1" : "0"); nextRound = -1; };
   setInterval(() => {
     if (role !== "host") return;
     if (autoNext && H.phase === "reveal" && !gameOver()) {
-      if (nextRound !== H.round) { nextRound = H.round; nextAt = Date.now() + AUTO_WAIT; }
+      const hit = !!(H.last && H.last.ok);
+      if (nextRound !== H.round) { nextRound = H.round; nextAt = Date.now() + (hit ? AUTO_HIT : AUTO_WAIT); }
       const n = Math.ceil((nextAt - Date.now()) / 1000);
-      $("hNext").hidden = false; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
+      $("hNext").hidden = hit; $("hNext").textContent = `Siguiente canción en ${Math.max(0, n)}…`;
       if (n <= 0 && !$("openRound").disabled) { nextAt = Infinity; $("hNext").hidden = true; $("openRound").click(); }
     } else { $("hNext").hidden = true; if (H.phase !== "reveal") nextRound = -1; }
     if (H.running && H.phase === "open" && Date.now() >= deadline && cfg().guess) { finishGuess(); return; }
